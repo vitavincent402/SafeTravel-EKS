@@ -14,3 +14,11 @@ run_bootstrap_deploy = true
 
 # 저장소가 불변 주체를 쓰면: gh api repos/<repo>/actions/oidc/customization/sub 의 sub_claim_prefix
 # github_oidc_sub_prefix = ""
+
+# 팀원 클러스터 권한 (IAM 사용자는 scripts/create-team-users.ps1 로 먼저 만들어 둔다)
+# team_members = {
+#   yujin    = { arn = "arn:aws:iam::<계정ID>:user/keeper-yujin",    level = "developer" }
+#   junil    = { arn = "arn:aws:iam::<계정ID>:user/keeper-junil",    level = "developer" }
+#   mansu    = { arn = "arn:aws:iam::<계정ID>:user/keeper-mansu",    level = "viewer" }
+#   seongrim = { arn = "arn:aws:iam::<계정ID>:user/keeper-seongrim", level = "viewer" }
+# }

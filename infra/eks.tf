@@ -1,3 +1,42 @@
+# 팀원 권한 (var.team_members). IAM 사용자는 이 코드 밖에서 만들고(매일 destroy해도 유지),
+# 여기서는 클러스터 안 권한(access entry)만 부여합니다.
+locals {
+  access_levels = {
+    # 클러스터 전체 관리 (인프라 담당)
+    admin = {
+      cluster_admin = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+        access_scope = { type = "cluster", namespaces = [] }
+      }
+    }
+    # 전체 조회 + keeper 네임스페이스 안에서만 수정 (앱·DB·CI/CD 담당)
+    developer = {
+      view = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+        access_scope = { type = "cluster", namespaces = [] }
+      }
+      keeper_edit = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+        access_scope = { type = "namespace", namespaces = ["keeper"] }
+      }
+    }
+    # 조회만
+    viewer = {
+      view = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+        access_scope = { type = "cluster", namespaces = [] }
+      }
+    }
+  }
+
+  team_access_entries = {
+    for name, m in var.team_members : name => {
+      principal_arn       = m.arn
+      policy_associations = local.access_levels[m.level]
+    }
+  }
+}
+
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.24"
@@ -46,20 +85,23 @@ module "eks" {
   }
 
   # GitHub Actions 역할: keeper 네임스페이스 안에서만 배포 가능
-  access_entries = {
-    github_actions = {
-      principal_arn = aws_iam_role.github_actions.arn
-      policy_associations = {
-        keeper_edit = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
-          access_scope = {
-            type       = "namespace"
-            namespaces = ["keeper"]
+  access_entries = merge(
+    {
+      github_actions = {
+        principal_arn = aws_iam_role.github_actions.arn
+        policy_associations = {
+          keeper_edit = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+            access_scope = {
+              type       = "namespace"
+              namespaces = ["keeper"]
+            }
           }
         }
       }
-    }
-  }
+    },
+    local.team_access_entries
+  )
 }
 
 # 앱 네임스페이스. Pod Security 'restricted'를 강제해 root 파드·권한 상승 파드는 거부됩니다.

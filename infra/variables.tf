@@ -51,3 +51,17 @@ variable "github_oidc_sub_prefix" {
   type        = string
   default     = ""
 }
+
+variable "team_members" {
+  description = "팀원의 클러스터 권한. 키는 이름, arn은 IAM 사용자 ARN, level은 admin | developer | viewer"
+  type = map(object({
+    arn   = string
+    level = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for m in values(var.team_members) : contains(["admin", "developer", "viewer"], m.level)])
+    error_message = "level은 admin, developer, viewer 중 하나여야 합니다."
+  }
+}
