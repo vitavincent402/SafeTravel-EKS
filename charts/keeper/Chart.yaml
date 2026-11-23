@@ -1,0 +1,7 @@
+apiVersion: v2
+name: keeper
+description: SafeTravel Keeper — web, api, vault
+type: application
+# 파이프라인이 helm package --version / --app-version 으로 실행마다 덮어씁니다.
+version: 0.1.0
+appVersion: "dev"

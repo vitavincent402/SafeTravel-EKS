@@ -1,0 +1,47 @@
+variable "region" {
+  description = "AWS 리전"
+  type        = string
+  default     = "ap-northeast-2"
+}
+
+variable "project" {
+  description = "리소스 이름 앞에 붙는 이름"
+  type        = string
+  default     = "keeper"
+}
+
+variable "cluster_version" {
+  description = "EKS 쿠버네티스 버전. 표준 지원 중인 버전만 쓸 것 (연장 지원 버전은 클러스터 시간당 추가 요금)"
+  type        = string
+  # 2026-11 기준 표준 지원: 1.34(12/2 종료)·1.35·1.36·1.37. 프로젝트 기간 내내 표준 지원이고, 출시 후 10개월이 지나 애드온·차트가 대응하는 1.35 사용
+  default = "1.35"
+}
+
+variable "github_repo" {
+  description = "배포 파이프라인이 있는 GitHub 저장소 (owner/repo)"
+  type        = string
+}
+
+variable "create_github_oidc_provider" {
+  description = "계정에 GitHub OIDC 공급자가 이미 있으면 false"
+  type        = bool
+  default     = true
+}
+
+variable "domain_name" {
+  description = "서비스 도메인 (예: keeper.example.com). 비워 두면 HTTPS 없이 ALB 주소로 접속"
+  type        = string
+  default     = ""
+}
+
+variable "hosted_zone_name" {
+  description = "Route 53 호스팅 영역 이름 (예: example.com). domain_name을 쓸 때만 필요"
+  type        = string
+  default     = ""
+}
+
+variable "run_bootstrap_deploy" {
+  description = "apply 마지막에 GitHub Actions 배포를 실행하고 끝날 때까지 기다릴지"
+  type        = bool
+  default     = true
+}

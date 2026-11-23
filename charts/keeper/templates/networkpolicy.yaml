@@ -1,0 +1,105 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy -}}
+{{- if or (not $np.albSourceCidrs) (not $np.databaseCidrs) }}{{ fail "networkPolicy.albSourceCidrs/databaseCidrs가 비어 있으면 '모두 허용'이 되므로 배포를 막습니다" }}{{ end }}
+# 0) 기본 거부: keeper 네임스페이스의 모든 파드는 들어오는·나가는 트래픽이 모두 막힘
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# 5) 모든 파드 → CoreDNS:53
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# 1) ALB(퍼블릭 서브넷) → web, api
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alb-to-web-api
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: ["keeper-web", "keeper-api"] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        {{- range $np.albSourceCidrs }}
+        - ipBlock: { cidr: {{ . }} }
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+# 2) api → vault (서류 요청은 vault만 처리)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-vault
+spec:
+  podSelector:
+    matchLabels: { app: keeper-vault }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: keeper-api }
+      ports:
+        - { protocol: TCP, port: {{ .Values.apps.vault.port }} }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-egress-to-vault
+spec:
+  podSelector:
+    matchLabels: { app: keeper-api }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keeper-vault }
+      ports:
+        - { protocol: TCP, port: {{ .Values.apps.vault.port }} }
+---
+# 3) api·vault → RDS:5432   4) api·vault → 443 (S3·KMS·Secrets Manager·STS, NAT 경유)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: ["keeper-api", "keeper-vault"] }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        {{- range $np.databaseCidrs }}
+        - ipBlock: { cidr: {{ . }} }
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: ["10.0.0.0/16"]   # VPC 안쪽은 위 규칙으로만
+      ports:
+        - { protocol: TCP, port: 443 }
+{{- end }}

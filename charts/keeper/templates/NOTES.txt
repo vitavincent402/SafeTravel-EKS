@@ -1,0 +1,2 @@
+keeper {{ .Chart.Version }} (image tag {{ .Values.image.tag }}) 배포 완료.
+접속 주소: kubectl get ingress keeper -n {{ .Release.Namespace }}

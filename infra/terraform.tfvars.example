@@ -1,0 +1,13 @@
+# 복사해서 terraform.tfvars로 저장한 뒤 값을 채우세요. (terraform.tfvars는 Git에 올리지 않음)
+github_repo = "vitavincent402/SafeTravel-EKS"
+
+# 계정에 GitHub OIDC 공급자가 이미 있으면 false
+create_github_oidc_provider = true
+
+# 도메인이 있으면 HTTPS. 없으면 둘 다 비워 두기
+domain_name      = ""
+hosted_zone_name = ""
+
+# 처음 구축할 때는 false로 두고 인프라만 먼저 성공시킨 뒤,
+# 파이프라인(GitHub 저장소·워크플로)이 준비되면 true로 바꿔 전체 apply 한 번을 확인합니다.
+run_bootstrap_deploy = false

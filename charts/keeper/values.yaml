@@ -1,0 +1,44 @@
+# 기본값. 환경별 값(ARN, 버킷 이름 등)은 Terraform이 만든 KEEPER_HELM_VALUES로 덮어씁니다.
+image:
+  registry: ""          # 파이프라인이 --set image.registry 로 채움
+  tag: ""               # 파이프라인이 --set image.tag 로 채움 (커밋 번호-실행 번호)
+  pullPolicy: IfNotPresent
+
+apps:
+  web:
+    replicas: 2
+    port: 8080
+    resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { memory: 128Mi } }
+  api:
+    replicas: 2
+    port: 8080
+    resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 256Mi } }
+  vault:
+    replicas: 2
+    port: 8080
+    resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 256Mi } }
+
+aws:
+  region: ap-northeast-2
+  documentBucket: ""
+  kmsKeyArn: ""
+  dbSecretArn: ""
+  appSecretArn: ""
+  dbHost: ""
+  dbName: keeper
+
+serviceAccounts:
+  api:
+    roleArn: ""
+  vault:
+    roleArn: ""
+
+ingress:
+  host: ""              # 비어 있으면 ALB 주소로 HTTP 접속
+  certificateArn: ""    # 있으면 HTTPS + HTTP→HTTPS 리다이렉트
+  wafAclArn: ""
+
+networkPolicy:
+  enabled: true
+  albSourceCidrs: []    # ALB가 있는 퍼블릭 서브넷 대역
+  databaseCidrs: []     # RDS가 있는 데이터 서브넷 대역

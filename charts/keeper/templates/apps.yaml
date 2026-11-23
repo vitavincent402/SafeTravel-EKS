@@ -1,0 +1,116 @@
+{{- /* web, api, vault 세 앱을 같은 틀로 만듭니다: ServiceAccount + Deployment + Service */ -}}
+{{- $root := . -}}
+{{- range $name, $app := .Values.apps }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keeper-{{ $name }}
+  labels:
+    {{- include "keeper.labels" $root | nindent 4 }}
+  {{- $sa := index $root.Values.serviceAccounts $name | default dict }}
+  {{- if $sa.roleArn }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ $sa.roleArn }}   # IRSA: 이 앱만 받는 IAM 역할
+  {{- end }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keeper-{{ $name }}
+  labels:
+    app: keeper-{{ $name }}
+    {{- include "keeper.labels" $root | nindent 4 }}
+spec:
+  replicas: {{ $app.replicas }}
+  selector:
+    matchLabels:
+      app: keeper-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: keeper-{{ $name }}
+        {{- include "keeper.labels" $root | nindent 8 }}
+    spec:
+      serviceAccountName: keeper-{{ $name }}
+      # 노드 두 대(AZ 두 곳)에 나눠 배치
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: keeper-{{ $name }}
+      # Pod Security 'restricted' 기준을 만족하는 설정
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $name }}
+          image: {{ include "keeper.image" (list $root $name) }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $app.port }}
+          env:
+            - name: PORT
+              value: {{ $app.port | quote }}
+            {{- if ne $name "web" }}
+            - name: AWS_REGION
+              value: {{ $root.Values.aws.region | quote }}
+            - name: DB_HOST
+              value: {{ $root.Values.aws.dbHost | quote }}
+            - name: DB_NAME
+              value: {{ $root.Values.aws.dbName | quote }}
+            - name: DB_SECRET_ARN        # 비밀번호 값이 아니라 위치만 전달. 파드가 IRSA로 직접 읽음
+              value: {{ $root.Values.aws.dbSecretArn | quote }}
+            - name: APP_SECRET_ARN
+              value: {{ $root.Values.aws.appSecretArn | quote }}
+            {{- end }}
+            {{- if eq $name "api" }}
+            - name: VAULT_URL
+              value: "http://keeper-vault:{{ $root.Values.apps.vault.port }}"
+            {{- end }}
+            {{- if eq $name "vault" }}
+            - name: DOC_BUCKET
+              value: {{ $root.Values.aws.documentBucket | quote }}
+            - name: KMS_KEY_ARN
+              value: {{ $root.Values.aws.kmsKeyArn | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml $app.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keeper-{{ $name }}
+  labels:
+    {{- include "keeper.labels" $root | nindent 4 }}
+spec:
+  selector:
+    app: keeper-{{ $name }}
+  ports:
+    - name: http
+      port: {{ $app.port }}
+      targetPort: http
+{{- end }}

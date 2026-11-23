@@ -1,0 +1,96 @@
+# 빌드 → Trivy 검사 → ECR 푸시 → Helm 패키지 푸시 → helm upgrade
+# 실행: main 브랜치에 push / terraform apply 마지막 단계(workflow_dispatch)
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/**", "charts/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC로 AWS 역할 받기 (액세스 키 없음)
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  REGISTRY: ${{ vars.ECR_REGISTRY }}
+  CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: AWS 로그인 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: ECR 로그인
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 버전 정하기
+        run: |
+          # ECR 태그는 덮어쓰기 금지(IMMUTABLE)라서 실행마다 다른 값
+          echo "TAG=${GITHUB_SHA::7}-r${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "CHART_VERSION=0.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: 이미지 빌드
+        run: |
+          for app in web api vault; do
+            docker build -t "$REGISTRY/keeper/$app:$TAG" "apps/$app"
+          done
+
+      - name: Trivy 이미지 검사 (HIGH·CRITICAL이 있으면 중단)
+        run: |
+          # 발표 전 버전을 고정하세요 (예: aquasec/trivy:0.57.1)
+          for app in web api vault; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+              image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress \
+              "$REGISTRY/keeper/$app:$TAG"
+          done
+
+      - name: 이미지 푸시
+        run: |
+          for app in web api vault; do
+            docker push "$REGISTRY/keeper/$app:$TAG"
+          done
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Helm 패키지 만들어 ECR에 푸시
+        run: |
+          helm lint charts/keeper --set image.registry=x --set image.tag=x
+          helm package charts/keeper --version "$CHART_VERSION" --app-version "$TAG" -d dist
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            helm registry login --username AWS --password-stdin "$REGISTRY"
+          helm push "dist/keeper-$CHART_VERSION.tgz" "oci://$REGISTRY/charts"
+
+      - name: 배포 (ECR의 패키지로 helm upgrade)
+        env:
+          KEEPER_HELM_VALUES: ${{ vars.KEEPER_HELM_VALUES }}
+        run: |
+          aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+          printf '%s' "$KEEPER_HELM_VALUES" > env-values.yaml
+          helm upgrade --install keeper "oci://$REGISTRY/charts/keeper" \
+            --version "$CHART_VERSION" \
+            --namespace keeper \
+            -f env-values.yaml \
+            --set image.registry="$REGISTRY" \
+            --set image.tag="$TAG" \
+            --atomic --wait --timeout 10m   # 실패하면 이전 버전으로 자동 롤백
+
+      - name: 결과
+        run: |
+          helm list -n keeper
+          kubectl get pods,svc,ingress -n keeper
