@@ -11,3 +11,6 @@ hosted_zone_name = ""
 # true: terraform apply 한 번에 파이프라인까지 실행해서 앱이 떠 있는 상태로 끝남 (강사님 조건)
 # false: 인프라만 만들고 멈춤 (파이프라인 없이 인프라만 확인할 때)
 run_bootstrap_deploy = true
+
+# 저장소가 불변 주체를 쓰면: gh api repos/<repo>/actions/oidc/customization/sub 의 sub_claim_prefix
+# github_oidc_sub_prefix = ""

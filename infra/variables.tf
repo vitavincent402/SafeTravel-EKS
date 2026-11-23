@@ -45,3 +45,9 @@ variable "run_bootstrap_deploy" {
   type        = bool
   default     = true
 }
+
+variable "github_oidc_sub_prefix" {
+  description = "GitHub OIDC sub 값의 앞부분. 비우면 repo:<github_repo>. 저장소가 불변 주체(immutable subject)를 쓰면 gh api repos/<repo>/actions/oidc/customization/sub 의 sub_claim_prefix 값을 넣는다."
+  type        = string
+  default     = ""
+}
