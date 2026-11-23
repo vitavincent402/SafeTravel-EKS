@@ -17,8 +17,8 @@ run_bootstrap_deploy = true
 
 # 팀원 클러스터 권한 (IAM 사용자는 scripts/create-team-users.ps1 로 먼저 만들어 둔다)
 # team_members = {
-#   yujin    = { arn = "arn:aws:iam::<계정ID>:user/keeper-yujin",    level = "developer" }
-#   junil    = { arn = "arn:aws:iam::<계정ID>:user/keeper-junil",    level = "developer" }
-#   mansu    = { arn = "arn:aws:iam::<계정ID>:user/keeper-mansu",    level = "viewer" }
-#   seongrim = { arn = "arn:aws:iam::<계정ID>:user/keeper-seongrim", level = "viewer" }
+#   db  = { arn = "arn:aws:iam::<계정ID>:user/keeper-db",    level = "developer" }
+#   soc = { arn = "arn:aws:iam::<계정ID>:user/keeper-soc",    level = "developer" }
+#   web = { arn = "arn:aws:iam::<계정ID>:user/keeper-web",    level = "viewer" }
+#   red = { arn = "arn:aws:iam::<계정ID>:user/keeper-red", level = "viewer" }
 # }
