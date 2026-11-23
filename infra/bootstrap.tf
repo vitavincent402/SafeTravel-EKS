@@ -127,7 +127,7 @@ resource "terraform_data" "app_cleanup" {
     when        = destroy
     interpreter = self.input.windows ? ["PowerShell", "-Command"] : ["bash", "-c"]
     command = self.input.windows ? join("\n", [
-      "$env:KUBECONFIG = [System.IO.Path]::GetTempFileName()",
+      "$env:KUBECONFIG = Join-Path $env:TEMP ('keeper-kc-' + [guid]::NewGuid().ToString())",
       "aws eks update-kubeconfig --name ${self.input.cluster} --region ${self.input.region} | Out-Null",
       "helm uninstall keeper -n keeper --wait --timeout 5m",
       "Write-Output 'waiting for ALB cleanup'; Start-Sleep -Seconds 60",
@@ -142,5 +142,11 @@ resource "terraform_data" "app_cleanup" {
   }
 
   # 이 리소스가 LB Controller·네임스페이스보다 먼저 삭제되도록 의존 관계를 둠
-  depends_on = [helm_release.lbc, kubernetes_namespace.keeper]
+  # WAF 연결과 인증서는 ALB가 지워져야 삭제됨 → 이 정리 단계가 WAF·인증서 삭제보다 먼저 끝나야 함
+  depends_on = [
+    helm_release.lbc,
+    kubernetes_namespace.keeper,
+    aws_wafv2_web_acl.keeper,
+    aws_acm_certificate_validation.this,
+  ]
 }

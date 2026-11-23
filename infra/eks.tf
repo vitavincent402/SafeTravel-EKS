@@ -5,6 +5,11 @@ module "eks" {
   cluster_name    = "${var.project}-eks"
   cluster_version = var.cluster_version
 
+  # 표준 지원 기간이 끝나도 추가 요금이 붙는 연장 지원으로 넘어가지 않게 고정 (크레딧을 아끼기 위해)
+  cluster_upgrade_policy = {
+    support_type = "STANDARD"
+  }
+
   # GitHub Actions(인터넷)에서 helm upgrade를 하려면 API 엔드포인트가 공개되어 있어야 합니다.
   # 접속은 IAM 인증을 통과한 역할만 가능하고, GitHub 역할은 keeper 네임스페이스 권한만 받습니다.
   cluster_endpoint_public_access = true

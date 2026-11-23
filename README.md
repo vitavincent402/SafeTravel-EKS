@@ -28,46 +28,33 @@ apps/web, apps/api, apps/vault  임시 앱 (각 담당이 실제 코드로 교�
 
 ## 처음 한 번 준비
 
-1. GitHub 저장소를 만들고 이 폴더를 main 브랜치에 push
-2. 실행할 PC에 설치: Terraform 1.6 이상, AWS CLI v2, GitHub CLI(`gh auth login`), Helm 3, bash
-   - Windows는 PowerShell에서 그대로 실행됩니다. `bootstrap.tf`가 실행 PC를 보고 PowerShell/bash 스크립트를 고릅니다.
-   - PowerShell에서는 `export` 대신 `$env:AWS_PROFILE = "keeper"`, `-target`은 `'-target=module.vpc'`처럼 작은따옴표로 감쌉니다.
+1. GitHub 저장소(비공개)에 이 폴더를 main 브랜치로 push (이미 되어 있으면 생략)
+2. 실행할 PC에 설치: Terraform 1.6 이상, AWS CLI v2, GitHub CLI, Helm 3
+   - Windows는 PowerShell(VS Code 터미널)에서 그대로 실행됩니다. `bootstrap.tf`가 실행 PC를 보고 PowerShell/bash 스크립트를 고릅니다.
+   - 확인: `terraform version`, `aws --version`, `gh --version`, `helm version`
+   - GitHub 로그인: `gh auth login` (HTTPS, 브라우저 로그인). `gh auth status`에 `Token scopes`에 `repo`, `workflow`가 있어야 합니다.
 3. Terraform 실행용 IAM 사용자로 로그인 (루트 계정으로 apply하지 않음)
-   ```bash
-   aws configure --profile keeper      # IAM 사용자 액세스 키 입력, 리전 ap-northeast-2
-   export AWS_PROFILE=keeper           # 터미널을 새로 열 때마다. terraform·kubectl·helm이 모두 이 프로필을 씀
-   aws sts get-caller-identity         # Arn이 ...:user/<본인 IAM 사용자> 인지 확인
+   ```powershell
+   aws configure --profile keeper          # IAM 사용자 액세스 키 입력, 리전 ap-northeast-2, 출력 json
+   $env:AWS_PROFILE = "keeper"             # 터미널을 새로 열 때마다. terraform·kubectl·helm이 모두 이 프로필을 씀
+   aws sts get-caller-identity             # Arn 끝이 user/keeper-netsec 인지 확인
    ```
-   - `apply`를 실행한 IAM 사용자가 클러스터 관리자가 됩니다. 다른 사람이 apply하면 관리자가 바뀌므로, S3 state로 옮기기 전까지 apply는 한 사람만 합니다.
-4. `cp infra/terraform.tfvars.example infra/terraform.tfvars` 후 `github_repo` 채우기
+   - `apply`를 실행한 IAM 사용자가 클러스터 관리자가 됩니다. 다른 사람이 apply하면 관리자가 바뀌므로, state를 S3로 옮기기 전까지 apply는 한 사람만 합니다.
+4. `cp infra/terraform.tfvars.example infra/terraform.tfvars` (PowerShell: `Copy-Item`). `github_repo`는 이미 채워져 있습니다.
 
-## 첫 구축: 단계별로 (인프라만, 파이프라인 없이)
+## 비용 (크레딧만 쓰기)
 
-`terraform.tfvars`에서 `run_bootstrap_deploy = false`인 상태로 진행합니다. 실패하면 그 단계만 다시 실행합니다.
-
-```bash
-cd infra
-terraform init
-terraform apply -target=module.vpc     # 약 3분
-terraform apply -target=module.eks     # 약 15~20분
-terraform apply                        # 나머지 (RDS·S3·KMS·ECR·WAF·LB Controller), 약 10~15분
-
-aws eks update-kubeconfig --name keeper-eks --region ap-northeast-2
-kubectl get nodes                      # 노드 2대 Ready
-kubectl get pods -n kube-system        # aws-load-balancer-controller Running
-kubectl get ns keeper --show-labels    # pod-security.kubernetes.io/enforce=restricted
-
-terraform destroy                      # 작업이 끝난 날에는 삭제 (켜 두면 하루 7~8달러 안팎)
-```
-
-`-target` 경고는 정상입니다. 파이프라인이 준비되면 `run_bootstrap_deploy = true`로 바꿔 아래 "구축과 삭제"를 한 번에 확인합니다.
+- 켜 두면 하루 7~8달러 안팎입니다(EKS 컨트롤 플레인, 노드 2대, NAT, RDS, ALB). 크레딧이 끝나면 카드로 청구됩니다.
+- **작업이 끝나는 날에는 반드시 `terraform destroy`.** 다음 날 `terraform apply`로 다시 만듭니다.
+- 도메인(`domain_name`)은 비워 두세요. 도메인 등록비는 크레딧으로 결제되지 않습니다.
+- `cluster_version`은 표준 지원 버전만 쓰고, `cluster_upgrade_policy = STANDARD`로 연장 지원 추가 요금을 막아 둡니다.
 
 ## 구축과 삭제
 
 ```bash
 cd infra
 terraform init
-terraform apply        # 20~30분. 끝나면 앱까지 떠 있음
+terraform apply        # 20~30분. run_bootstrap_deploy = true 이므로 끝나면 앱까지 떠 있음
 terraform output app_url
 
 terraform destroy      # 앱 삭제 → ALB 정리 → 인프라 삭제 순서로 자동 진행
