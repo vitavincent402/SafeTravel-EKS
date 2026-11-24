@@ -2,4 +2,4 @@ apiVersion: v2
 name: security-baseline
 description: keeper 네임스페이스 입장 정책(CEL), kube-bench 정기 점검, RED 시험용 파드 생성 권한
 type: application
-version: 0.3.0
+version: 0.4.0

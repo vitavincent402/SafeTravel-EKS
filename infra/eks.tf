@@ -22,6 +22,13 @@ locals {
         access_scope = { type = "namespace", namespaces = ["keeper"] }
       }
     }
+    # 조회 + keeper 네임스페이스 쓰기(Secret 조회 제외). Edit 정책 대신 security-baseline의 Role을 쓴다.
+    developer-nosecret = {
+      view = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+        access_scope = { type = "cluster", namespaces = [] }
+      }
+    }
     # 조회만
     viewer = {
       view = {
@@ -40,9 +47,11 @@ locals {
   }
 
   # level별로 붙일 쿠버네티스 그룹 (차트 security-baseline의 pod-tester Role이 이 그룹에 묶임)
-  pod_tester_group = "keeper-pod-tester"
+  pod_tester_group         = "keeper-pod-tester"
+  developer_nosecret_group = "keeper-developer-nosecret"
   access_groups = {
-    tester = [local.pod_tester_group]
+    tester             = [local.pod_tester_group]
+    developer-nosecret = [local.developer_nosecret_group]
   }
 
   team_access_entries = {

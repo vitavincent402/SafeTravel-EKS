@@ -1,0 +1,4 @@
+# infra/ 변경은 인프라 담당 승인 필요 (main 보호 규칙의 "코드 소유자 검토 필수"를 켜야 효력이 있음)
+/infra/ @vitavincent402
+/persistent/ @vitavincent402
+/scripts/ @vitavincent402
