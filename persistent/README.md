@@ -47,6 +47,20 @@ terraform output
 
 `prevent_destroy`와 Cognito 삭제 보호가 막는다. 의도적으로 지우려면 `cognito.tf`·`zone.tf`·`ses.tf`의 `prevent_destroy`를 `false`로, `deletion_protection`을 `"INACTIVE"`로 바꿔 `apply`한 뒤 `terraform destroy`. 호스팅 영역은 레코드가 남아 있으면 지워지지 않는다.
 
+## state를 S3로 (infra/ 상태 파일 공유)
+
+`state.tf`가 상태 파일 보관용 S3 버킷(`keeper-tfstate-<계정 번호>`: 버전 관리, 암호화, 퍼블릭 차단, HTTPS만 허용, 삭제 방지)을 만든다. 이 폴더를 `apply`하면 버킷만 추가된다.
+
+`infra/`의 state를 옮기는 순서(destroy가 끝나 state가 비었을 때가 안전):
+
+1. 이 폴더에서 `terraform apply` → 출력 `tfstate_bucket` 확인
+2. `terraform version`이 1.10 이상인지 확인 (S3 잠금 파일 기능)
+3. `infra/backend.tf.example`을 `backend.tf`로 이름을 바꾸고 `bucket`을 출력값으로 수정
+4. `infra/`에서 `terraform init -migrate-state` → 물으면 `yes`
+5. 로컬 `terraform.tfstate`는 백업 폴더로 옮겨 둔다. 그 뒤 `plan`이 이전과 같은지 확인
+
+이 폴더(persistent/)의 state는 계속 로컬 파일이다. 버킷을 만드는 쪽이 자기 버킷에 의존하지 않게 하려는 것이고, 백업은 계속 필요하다.
+
 ## 알아 둘 점
 
 - state는 이 폴더의 `terraform.tfstate`(로컬, Git에 올리지 않음)다. 이 파일을 잃으면 이 리소스들을 Terraform이 관리하지 못한다. 백업해 둔다.
