@@ -14,7 +14,3 @@ kubeBench:
 podTester:
   enabled: true                # keeper-red(level=tester)가 위험 파드를 서버 dry-run으로 시험할 수 있게 Role을 만듦
   group: keeper-pod-tester     # EKS access entry의 kubernetes_groups 와 같아야 함
-
-developerNoSecret:
-  enabled: true                # level=developer-nosecret: keeper 네임스페이스 쓰기, Secret 조회 제외
-  group: keeper-developer-nosecret
