@@ -1,0 +1,14 @@
+# 위험 5: 앱 서비스 어카운트(keeper-api)를 붙여 파드 만들기 - 서버 dry-run 으로만 시도
+# 우리 ECR 이미지·비root 이므로 다른 정책은 통과한다. 이 정책(keeper-restrict-app-service-accounts)이 Deny 일 때만 거부된다.
+# image 는 실제 ECR 주소로 바꿔서 쓴다 (예: <계정>.dkr.ecr.ap-northeast-2.amazonaws.com/keeper/api:latest)
+apiVersion: v1
+kind: Pod
+metadata: { name: keeper-attack-sa-hijack }
+spec:
+  serviceAccountName: keeper-api
+  securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+  containers:
+    - name: c
+      image: REPLACE_ECR_REGISTRY/keeper/api:latest
+      command: [sleep, "3600"]
+      securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

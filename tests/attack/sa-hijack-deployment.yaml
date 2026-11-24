@@ -1,0 +1,18 @@
+# 위험 5-2: Deployment 로 우회 - 파드는 replicaset-controller 가 만들기 때문에 파드 정책만으로는 못 막는다.
+# 서버 dry-run 으로만 시도. 이 정책(keeper-restrict-app-service-accounts)이 Deny 일 때만 거부된다.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: keeper-attack-sa-hijack }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: keeper-attack-sa-hijack } }
+  template:
+    metadata: { labels: { app: keeper-attack-sa-hijack } }
+    spec:
+      serviceAccountName: keeper-api
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: c
+          image: REPLACE_ECR_REGISTRY/keeper/api:latest
+          command: [sleep, "3600"]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

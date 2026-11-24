@@ -18,6 +18,16 @@ resource "helm_release" "security_baseline" {
     admissionPolicies     = { enabled = var.hardening }
     kubeBench             = { enabled = var.hardening }
     podTester             = { enabled = true, group = local.pod_tester_group }
+    # 앱 서비스 어카운트(keeper-*) 도용 방지. 처음에는 Warn+Audit(정상 배포가 안 걸리는지 확인), 검증 후 sa_guard_deny=true 로 거부 전환
+    saGuard = {
+      enabled = true
+      actions = var.sa_guard_deny ? ["Deny"] : ["Warn", "Audit"]
+      # 앱 서비스 어카운트를 쓸 수 있는 사용자: 배포 파이프라인(GitHub Actions 역할의 모든 세션)과 이 Terraform 실행 계정
+      deployers = [
+        "arn:aws:sts::${data.aws_caller_identity.current.account_id}:assumed-role/${aws_iam_role.github_actions.name}/",
+        data.aws_caller_identity.current.arn,
+      ]
+    }
   })]
 
   depends_on = [module.eks, kubernetes_namespace.keeper]

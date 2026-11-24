@@ -72,6 +72,12 @@ variable "team_members" {
   }
 }
 
+variable "sa_guard_deny" {
+  description = "앱 서비스 어카운트(keeper-*) 도용 방지 정책을 거부(Deny)로 켤지. false(기본)=Warn+Audit만(검증 기간). 정상 배포가 걸리지 않는 것을 확인한 뒤 true"
+  type        = bool
+  default     = false
+}
+
 variable "rate_limit_action" {
   description = "WAF rate-limit 규칙의 동작. block(기본) 또는 count(차단하지 않고 집계만). count는 부하 측정 시간에만 쓰고 끝나면 block으로 되돌린다"
   type        = string
