@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py auth.py users.py db.py schema.sql ./
+COPY *.py schema.sql ./
 USER 10001
 EXPOSE 8080
 CMD ["python", "-u", "main.py"]

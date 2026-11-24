@@ -1,4 +1,4 @@
--- schema.sql (임시) : SafeTravel Keeper table 6개
+-- schema.sql (임시) : SafeTravel Keeper table 7개
 -- PostgreSQL 16 기준. 여러 번 실행해도 안전하도록 IF NOT EXISTS를 씀.
 -- api가 시작할 때 한 번에 실행함 (동시 실행은 db.py의 잠금이 막음).
 
@@ -27,21 +27,40 @@ CREATE TABLE IF NOT EXISTS documents (
     owner_id            uuid        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     doc_type            text        NOT NULL,
     file_name           text        NOT NULL,
+    content_type        text        NOT NULL,       -- 파일 내용으로 판단한 종류 (image/png 등)
     s3_key              text        NOT NULL UNIQUE,
     encrypted_data_key  bytea       NOT NULL,
-    uploaded_at         timestamptz NOT NULL DEFAULT now()
+    uploaded_at         timestamptz NOT NULL DEFAULT now(),
+    deleted_at          timestamptz                     -- 삭제한 시각. 감사 기록 때문에 행은 남기고 데이터 키는 비움
 );
 
 -- 4. 비상 상태: 사용자당 한 줄
+--    status: normal(평상) / emergency(비상)
+--    trigger_source: sos(사용자가 SOS) / auto(열람 요청에 1분 무응답으로 자동 전환)
 CREATE TABLE IF NOT EXISTS emergency_states (
     user_id         uuid        PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    status          text        NOT NULL DEFAULT 'normal'
-                    CHECK (status IN ('normal', 'pending', 'emergency')),
-    requested_by    uuid        REFERENCES users(id),
-    requested_at    timestamptz,
-    changed_at      timestamptz NOT NULL DEFAULT now(),
-    trigger_source  text        CHECK (trigger_source IN ('sos', 'auto'))
+    status          text        NOT NULL DEFAULT 'normal' CHECK (status IN ('normal', 'emergency')),
+    trigger_source  text        CHECK (trigger_source IN ('sos', 'auto')),
+    changed_at      timestamptz NOT NULL DEFAULT now()       -- 상태가 바뀐 시각 (비상 시작 시각)
 );
+
+-- 4-1. 열람 요청: 보호자가 요청하면 pending, 여행자가 거절하면 denied,
+--      wait_until까지 응답이 없으면 timeout(→ 자동 비상), 여행자가 SOS를 해제하면 cancelled
+CREATE TABLE IF NOT EXISTS access_requests (
+    id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id      uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- 여행자(서류 주인)
+    guardian_id   uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- 요청한 보호자
+    status        text        NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'denied', 'timeout', 'cancelled')),
+    requested_at  timestamptz NOT NULL DEFAULT now(),
+    wait_until    timestamptz NOT NULL,                     -- 이 시각까지 응답 없으면 자동 비상 (요청 + 1분)
+    responded_at  timestamptz,                              -- 거절·취소한 시각
+    CHECK (owner_id <> guardian_id)
+);
+-- 여행자 한 명에게 대기 중인 요청은 하나만
+CREATE UNIQUE INDEX IF NOT EXISTS uq_access_requests_one_pending
+    ON access_requests (owner_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_access_requests_owner_guardian ON access_requests (owner_id, guardian_id);
 
 -- 5. 열람 토큰: 토큰 값 자체가 아니라 해시를 저장
 CREATE TABLE IF NOT EXISTS view_tokens (

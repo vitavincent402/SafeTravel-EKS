@@ -1,35 +1,53 @@
 # api (앱·데이터 담당)
 
-## 지금 되는 것
-- `GET /api/me`: 화면이 보낸 Cognito **ID 토큰**(`Authorization: Bearer <ID 토큰>`)을 확인하고,
-  처음 로그인한 사람이면 users table에 행을 만든 뒤 `{id, email, name, role}`을 돌려준다.
-- `role`: 누군가의 보호자로 등록되어 있으면 `guardian`, 아니면 `user` (임시 규칙)
-- api가 켜질 때 `schema.sql`로 table 6개를 만든다 (이미 있으면 넘어감, 파드 2개가 동시에 실행해도 잠금으로 하나씩).
+화면이 부르는 서버. 로그인 확인, 보호자, 비상 상태, 열람 토큰을 처리하고, 서류 요청은 서명해서 vault로 넘긴다.
+서류를 직접 암호화하거나 풀지 않는다 (api 역할에는 KMS·S3 권한이 없음).
+
+## 주소 (화면·문서 담당의 주소 표와 같음)
+인증: 모든 /api 요청에 `Authorization: Bearer <Cognito 액세스 토큰>` (ID 토큰도 받음).
+액세스 토큰에는 이메일이 없어서, 처음 로그인한 사람만 Cognito userInfo에 한 번 물어본다.
+오류는 `{"error": "..."}`, 시각은 UTC ISO (`2026-11-24T05:20:00Z`).
+
+| 주소 | 하는 일 |
+|---|---|
+| `GET /api/me` | `{id, email, name, role, emergency, emergency_since, emergency_reason}` |
+| `GET /api/docs` | `[{id, title, uploaded_at, content_type}]` |
+| `POST /api/docs` (multipart: title, file) | `{id}`. PNG·JPEG·WEBP·PDF만, 최대 5MB (종류는 파일 내용으로 판단) |
+| `GET /api/docs/{id}` | 파일 |
+| `DELETE /api/docs/{id}` | 삭제 **(추가)** |
+| `POST /api/sos` | `{emergency: true}`. 이미 비상이면 409 |
+| `POST /api/sos/cancel` | `{emergency: false}`. 비상 해제, 대기 요청 취소, 열람 토큰 모두 취소 **(추가)** |
+| `GET /api/requests/pending` | `{request_id, guardian_name, expires_at}` / 없으면 204 |
+| `POST /api/requests/{id}/deny` | `{denied: true}`. 시간이 지났으면 409 |
+| `GET /api/guardian/travelers` | `[{user_id, name, emergency, emergency_since, emergency_reason, request}]` |
+| `POST /api/guardian/requests {user_id}` | `{request_id, wait_until}`. 이미 대기 중·이미 비상이면 409 |
+| `POST /api/guardian/view-token {user_id}` | `{view_token, expires_at}`. 비상 아니면 403 |
+| `GET /api/guardian/travelers/{user_id}/docs` (X-View-Token) | `[{id, title, uploaded_at, content_type}]` |
+| `GET /api/guardian/docs/{id}` (X-View-Token) | 파일 |
+| `GET /api/guardians`, `POST /api/guardians {email}`, `DELETE /api/guardians/{user_id}` | 보호자 관리 **(추가)** |
+
+request.status: `pending`, `denied`, `timeout`(1분 무응답 → 자동 비상), `cancelled`(여행자가 SOS 또는 해제)
+403 error 값: `not_guardian`, `not_emergency`, `no_view_token`, `invalid_view_token`, `not_owner`
+role: 누군가의 보호자로 등록되어 있으면 `guardian`, 아니면 `user` (DB 기준, Cognito 그룹 안 씀)
 
 ## 파일
 | 파일 | 하는 일 |
 |---|---|
-| `auth.py` | 토큰 확인: 서명, 만료, 발급자(우리 풀), 대상(우리 앱 클라이언트), 종류(ID 토큰) |
-| `users.py` | Cognito 고유 번호(sub)로 사용자 찾기/만들기, 역할 계산 |
-| `db.py` | DB 연결 (비밀번호는 Secrets Manager에서 IRSA로 직접 읽음), table 만들기 |
-| `main.py` | 서버와 주소(`/healthz`, `/api/healthz`, `/api/me`) |
-| `schema.sql` | table 6개 (임시) |
+| `main.py` | 주소별 처리 |
+| `auth.py` | Cognito ID 토큰 확인 (서명, 만료, 발급자, 앱 클라이언트, 토큰 종류) |
+| `users.py` | 토큰 내용 → 사용자 정보, 역할 계산 |
+| `vault_client.py` | vault로 서명한 요청 보내기 |
+| `schema.sql` | table 7개 (임시). api가 켜질 때 적용 |
+| `internal_auth.py` `rules.py` `web.py` `db.py` `store.py` | **vault와 같은 내용의 공통 파일.** 고치면 `apps/vault`에도 복사 (`tests/test_shared.py`가 검사) |
 
-## 응답 코드
-| 코드 | 언제 |
-|---|---|
-| 200 | 정상 |
-| 401 | 토큰 없음, 위조, 만료, 다른 풀·다른 앱, access 토큰 |
-| 403 | 이메일이 확인되지 않은 계정 |
-| 409 | 같은 이메일을 다른 Cognito 계정이 이미 씀 |
-| 503 | Cognito 설정 없음, 공개 키를 못 받음, DB 준비 안 됨 |
-
-## 환경 변수
-`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `AWS_REGION`, `DB_HOST`, `DB_NAME`, `DB_SECRET_ARN`, `VAULT_URL`, `PORT`
-(Cognito 두 값은 차트 `cognito.userPoolId`, `cognito.clientId`에서 들어옴. Terraform이 채움)
+## 환경 변수 (차트가 넣어 줌)
+`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `AWS_REGION`, `DB_HOST`, `DB_NAME`, `DB_SECRET_ARN`, `APP_SECRET_ARN`, `VAULT_URL`, `PORT`
+선택: `VIEW_TOKEN_MINUTES`(기본 15),
+`REQUEST_WAIT_SECONDS`(기본 60), `SEED_JSON`(시험 데이터 `{"users":[{email,name,cognito_sub}],"guardians":[{owner_email,guardian_email}]}`)
 
 ## 시험
 ```
 pip install -r requirements.txt pytest
-python -m pytest -q tests
+python -m pytest -q tests                      # 로그인·흐름·공통 파일 40개
+PGHOST=... PGUSER=... PGDATABASE=... python tests/check_sql.py   # 모든 SQL을 실제 PostgreSQL에서 실행
 ```

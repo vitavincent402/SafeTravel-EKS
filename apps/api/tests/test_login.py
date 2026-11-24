@@ -17,8 +17,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from auth import CognitoVerifier, KeysUnavailable, TokenError  # noqa: E402
-from main import App, make_server  # noqa: E402
-from users import LoginRefused, MemoryUserStore, profile_from_claims  # noqa: E402
+from main import ApiHandler, App  # noqa: E402
+from store import MemoryStore  # noqa: E402
+from users import LoginRefused, profile_from_claims  # noqa: E402
+from web import make_server  # noqa: E402
 
 REGION, POOL, CLIENT = "ap-northeast-2", "ap-northeast-2_TESTPOOL", "test-client-id"
 ISSUER = f"https://cognito-idp.{REGION}.amazonaws.com/{POOL}"
@@ -62,12 +64,29 @@ def test_정상_토큰은_통과(verifier):
     {"exp": int(time.time()) - 120},                         # 만료
     {"aud": "other-client"},                                 # 다른 앱 클라이언트용
     {"iss": "https://cognito-idp.ap-northeast-2.amazonaws.com/other"},  # 다른 풀
-    {"token_use": "access"},                                 # access 토큰
     {"token_use": None},                                     # 종류 없음
+    {"token_use": "refresh"},                                # 다른 종류
 ])
 def test_조건이_틀린_토큰은_거부(verifier, over):
     with pytest.raises(TokenError):
         verifier.verify(token(**over))
+
+
+def test_액세스_토큰은_client_id로_확인(verifier):
+    def access(**over):
+        c = {"token_use": "access", "client_id": CLIENT, "aud": None, "email": None, "name": None}
+        c.update(over)
+        return token(**c)
+    assert verifier.verify(access())["token_use"] == "access"
+    with pytest.raises(TokenError):
+        verifier.verify(access(client_id="other-client"))
+    with pytest.raises(TokenError):
+        verifier.verify(access(client_id=None))
+
+
+def test_ID_토큰은_aud로_확인(verifier):
+    with pytest.raises(TokenError):
+        verifier.verify(token(aud=None))
 
 
 def test_위조된_서명은_거부(verifier):
@@ -135,8 +154,8 @@ def test_이름이_없으면_이메일_앞부분():
 
 @pytest.fixture
 def server(verifier):
-    store = MemoryUserStore()
-    srv = make_server(App(verifier, store), 0, host="127.0.0.1")
+    store = MemoryStore()
+    srv = make_server(ApiHandler, App(verifier, store), 0, host="127.0.0.1")
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}", store
     srv.shutdown()
@@ -161,8 +180,9 @@ def test_me_첫_로그인에_사용자를_만들고_두번째는_같은_사용�
 
 def test_me_보호자로_등록된_사람은_guardian(server):
     base, store = server
+    _, owner = get(f"{base}/api/me", token())
     _, body = get(f"{base}/api/me", token(sub="sub-guardian", email="guardian@example.com"))
-    store.guardian_ids.add(body["id"])
+    store.add_guardian(owner["id"], body["id"])
     _, body = get(f"{base}/api/me", token(sub="sub-guardian", email="guardian@example.com"))
     assert body["role"] == "guardian"
 
@@ -190,7 +210,7 @@ def test_healthz(server):
 
 
 def test_로그인_설정이_없으면_503():
-    srv = make_server(App(None, MemoryUserStore()), 0, host="127.0.0.1")
+    srv = make_server(ApiHandler, App(None, MemoryStore()), 0, host="127.0.0.1")
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         assert get(f"http://127.0.0.1:{srv.server_address[1]}/api/me", "x")[0] == 503

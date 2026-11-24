@@ -1,14 +1,16 @@
-"""Cognito ID 토큰 확인 (앱·데이터 담당).
+"""Cognito 토큰 확인 (앱·데이터 담당).
 
-화면은 로그인 뒤 받은 ID 토큰을 `Authorization: Bearer <ID 토큰>` 으로 보낸다.
+화면은 `Authorization: Bearer <Cognito 액세스 토큰>` 을 보낸다 (ID 토큰도 받음).
 api는 Cognito에 묻지 않고 토큰을 직접 확인한다.
 
 확인하는 것 5가지
   1. 서명: Cognito 공개 키(JWKS)로 서명이 맞는지 (위조 방지)
   2. 만료: exp 시각이 지나지 않았는지
   3. 발급자(iss): 우리 사용자 풀이 발급했는지
-  4. 대상(aud): 우리 앱 클라이언트용 토큰인지
-  5. 종류(token_use): ID 토큰인지 (access 토큰은 받지 않음)
+  4. 우리 앱 클라이언트용인지: 액세스 토큰은 client_id, ID 토큰은 aud
+  5. 종류(token_use): access 또는 id
+
+액세스 토큰에는 이메일·이름이 없다. 처음 로그인한 사람만 Cognito userInfo에 한 번 물어본다 (userinfo()).
 """
 import json
 import threading
@@ -28,7 +30,7 @@ class KeysUnavailable(Exception):
 
 class CognitoVerifier:
     def __init__(self, region, user_pool_id, app_client_id,
-                 fetch_jwks=None, leeway=30, min_refresh_interval=60):
+                 fetch_jwks=None, leeway=30, min_refresh_interval=60, fetch_userinfo=None):
         if not (region and user_pool_id and app_client_id):
             raise ValueError("region, user_pool_id, app_client_id가 모두 필요합니다")
         self.issuer = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
@@ -37,6 +39,8 @@ class CognitoVerifier:
         self.leeway = leeway                              # 서버 간 시계 차이 허용(초)
         self.min_refresh_interval = min_refresh_interval  # 공개 키를 너무 자주 다시 받지 않게
         self._fetch = fetch_jwks or self._fetch_from_cognito
+        self._userinfo = fetch_userinfo or self._userinfo_from_cognito
+        self._userinfo_url = None
         self._keys = {}
         self._last_refresh = 0.0
         self._lock = threading.Lock()
@@ -87,15 +91,40 @@ class CognitoVerifier:
             claims = jwt.decode(
                 token, key,
                 algorithms=["RS256"],
-                audience=self.client_id,
                 issuer=self.issuer,
                 leeway=self.leeway,
-                options={"require": ["exp", "iat", "iss", "aud", "sub", "token_use"]},
+                options={"require": ["exp", "iat", "iss", "sub", "token_use"], "verify_aud": False},
             )
         except jwt.ExpiredSignatureError as e:
             raise TokenError("만료된 토큰") from e
         except jwt.PyJWTError as e:
             raise TokenError(f"확인 실패: {type(e).__name__}") from e
-        if claims.get("token_use") != "id":
-            raise TokenError("ID 토큰이 아님")
+        use = claims.get("token_use")
+        if use == "access":
+            if claims.get("client_id") != self.client_id:
+                raise TokenError("다른 앱 클라이언트의 액세스 토큰")
+        elif use == "id":
+            if claims.get("aud") != self.client_id:
+                raise TokenError("다른 앱 클라이언트의 ID 토큰")
+        else:
+            raise TokenError("액세스·ID 토큰이 아님")
         return claims
+
+    def _userinfo_endpoint(self):
+        if not self._userinfo_url:
+            with urllib.request.urlopen(f"{self.issuer}/.well-known/openid-configuration", timeout=5) as r:
+                self._userinfo_url = json.load(r)["userinfo_endpoint"]
+        return self._userinfo_url
+
+    def _userinfo_from_cognito(self, access_token):
+        req = urllib.request.Request(self._userinfo_endpoint(),
+                                     headers={"Authorization": f"Bearer {access_token}"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.load(r)
+
+    def userinfo(self, access_token):
+        """액세스 토큰으로 Cognito에 이메일·이름을 묻는다 (처음 로그인할 때만)."""
+        try:
+            return self._userinfo(access_token)
+        except Exception as e:  # noqa: BLE001
+            raise KeysUnavailable(f"userInfo 실패: {type(e).__name__}") from e
