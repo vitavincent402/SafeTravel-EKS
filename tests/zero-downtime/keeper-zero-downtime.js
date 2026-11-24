@@ -10,6 +10,10 @@
 //   RATE      초당 요청 수 (기본 5)
 //   DURATION  시험 시간 (기본 10m)
 // 결과: tests/zero-downtime/results/<LABEL>-summary.txt, <LABEL>-summary.json
+//       요청별 시각은 실행할 때 --out csv=tests/zero-downtime/results/<LABEL>-requests.csv 로 남긴다 (README 참고)
+// 실패는 두 묶음으로 따로 센다 (SOC 요청)
+//   배포 영향: 502·503·504·500·연결 실패/시간 초과(상태 0)  ← 무중단 여부를 보는 숫자
+//   WAF 영향 : 403·429                                    ← 요청 제한에 걸린 것. 측정에서 분리
 
 import http from "k6/http";
 import exec from "k6/execution";
@@ -23,15 +27,20 @@ const PATHS = ["/", "/healthz", "/api/healthz"];
 const WAF_STOP = 5; // 403이 모두 합쳐 이만큼 나오면 WAF에 걸린 것으로 보고 멈춘다
 
 const okRate = new Rate("keeper_ok");
-const failed = new Counter("keeper_failed");
+const failed = new Counter("keeper_failed");          // 모든 실패
+const failDeploy = new Counter("keeper_fail_deploy");  // 502·503·504·500·0(연결 실패·시간 초과)
+const failWaf = new Counter("keeper_fail_waf");        // 403·429
+const DEPLOY_CODES = [0, 500, 502, 503, 504];
+const WAF_CODES = [403, 429];
 const latency = new Trend("keeper_latency", true);
 
 // 상태 코드별·주소별 실패 수를 요약에 나오게 하려고 표시용 기준을 건다 (항상 통과하는 조건)
-const STATUSES = ["0", "403", "502", "503", "504", "500", "404"];
+const STATUSES = ["0", "502", "503", "504", "500", "403", "429", "404"];
 const thresholds = { keeper_ok: ["rate>=0"] };
 STATUSES.forEach((s) => { thresholds[`keeper_failed{status:${s}}`] = ["count>=0"]; });
-// 403은 WAF 차단일 수 있으니 합쳐서 WAF_STOP 건이 되면 시험을 멈춘다 (SOC 요청: 낮게 시작, 걸리면 중단)
-thresholds["keeper_failed{status:403}"] = [{ threshold: `count<${WAF_STOP}`, abortOnFail: true }];
+// 403·429는 WAF 차단이라 합쳐서 WAF_STOP 건이 되면 시험을 멈춘다 (SOC 요청: 걸리면 바로 중단하고 알림)
+thresholds.keeper_fail_waf = [{ threshold: `count<${WAF_STOP}`, abortOnFail: true }];
+thresholds.keeper_fail_deploy = ["count>=0"];
 PATHS.forEach((p) => { thresholds[`keeper_failed{path:${p}}`] = ["count>=0"]; });
 
 export const options = {
@@ -66,6 +75,8 @@ export default function () {
   latency.add(res.timings.duration, { path });
   if (!good) {
     failed.add(1, { path, status: String(res.status) });
+    if (WAF_CODES.indexOf(res.status) >= 0) { failWaf.add(1, { path }); }
+    else if (DEPLOY_CODES.indexOf(res.status) >= 0) { failDeploy.add(1, { path }); }
     // 실패 시각을 초 단위로 남긴다 (SOC 로그·restart 시각과 맞춰 보기 위해)
     console.warn(`FAIL ${new Date().toISOString()} ${path} status=${res.status}${res.error ? " error=" + res.error : ""}`);
   }
@@ -92,6 +103,8 @@ export function handleSummary(data) {
     ``,
     `전체 요청: ${reqs}건`,
     `실패: ${fails}건 (${reqs ? ((fails / reqs) * 100).toFixed(2) : "0.00"}%)`,
+    `  배포 영향 (502·503·504·500·연결 실패): ${count(data, "keeper_fail_deploy")}건   ← 무중단 판단 기준`,
+    `  WAF 영향 (403·429): ${count(data, "keeper_fail_waf")}건`,
     `응답 시간: 평균 ${ms(lat.avg)}, p95 ${ms(lat["p(95)"])}, p99 ${ms(lat["p(99)"])}, 최대 ${ms(lat.max)}`,
     ``,
     `상태 코드별 실패 (0 = 연결 실패·시간 초과):`,
@@ -99,7 +112,7 @@ export function handleSummary(data) {
     `주소별 실패:`,
     ...PATHS.map((p) => `  ${p}: ${count(data, `keeper_failed{path:${p}}`)}건`),
     ``,
-    `실패 시각은 실행 화면의 FAIL 줄을 보세요.`,
+    `실패 시각은 실행 화면의 FAIL 줄, 요청별 시각은 ${LABEL}-requests.csv 를 보세요.`,
   ];
   const text = lines.join("\n") + "\n";
   return {

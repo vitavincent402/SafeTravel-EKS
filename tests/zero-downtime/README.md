@@ -13,7 +13,10 @@
 - User-Agent: `keeper-zero-downtime-test` (로그에서 이 시험만 골라낼 수 있게)
 - 요청 속도: 기본 초당 5건. **WAF 요청 제한(IP당 5분 300건 = 초당 1건)** 때문에, 측정 시간에는 조장이 rate-limit 규칙을 Count로 바꿔 둡니다(전환 13:55, 복구 14:35).
   그 밖의 시간에 돌릴 때는 `RATE=1`, 짧게(1분 이하)만 돌립니다.
-- 403이 모두 합쳐 5건이 되면 WAF에 걸린 것으로 보고 시험을 스스로 멈춥니다.
+- 실패는 두 묶음으로 따로 셉니다. **배포 영향**(502·503·504·500·연결 실패/시간 초과)이 무중단 판단 기준이고, **WAF 영향**(403·429)은 따로 봅니다.
+- 403·429가 합쳐 5건이 되면 WAF에 걸린 것으로 보고 시험을 스스로 멈춥니다. 멈추면 바로 SOC에 알립니다.
+- User-Agent는 로그에서 골라내는 용도일 뿐이고, 알림이나 WAF에서 빼 주지는 않습니다.
+- 요청마다 시각을 CSV 파일로 남겨, 감사 로그의 restart 시각과 맞춰 봅니다.
 - 같은 시간대에 RED의 요청 제한 시험은 하지 않습니다.
 - 출발지 IP는 개인 채널로만 공유합니다.
 
@@ -29,19 +32,33 @@ cd D:\SafeTravel-EKS
 # 시험해 보기 (WAF 제한 안쪽: 초당 1건, 30초)
 k6 run -e BASE_URL=https://travelsafe.click -e LABEL=dryrun -e RATE=1 -e DURATION=30s tests/zero-downtime/keeper-zero-downtime.js
 
-# 본 측정 (rate-limit 규칙이 Count로 바뀐 뒤에만)
-k6 run -e BASE_URL=https://travelsafe.click -e LABEL=before tests/zero-downtime/keeper-zero-downtime.js 2>&1 | Tee-Object tests/zero-downtime/results/before-log.txt
-k6 run -e BASE_URL=https://travelsafe.click -e LABEL=after  tests/zero-downtime/keeper-zero-downtime.js 2>&1 | Tee-Object tests/zero-downtime/results/after-log.txt
+# 본 측정 (rate-limit 규칙이 Count로 바뀐 뒤에만). --out csv 가 요청별 시각 파일
+k6 run --out csv=tests/zero-downtime/results/before-requests.csv -e BASE_URL=https://travelsafe.click -e LABEL=before tests/zero-downtime/keeper-zero-downtime.js 2>&1 | Tee-Object tests/zero-downtime/results/before-log.txt
+k6 run --out csv=tests/zero-downtime/results/after-requests.csv  -e BASE_URL=https://travelsafe.click -e LABEL=after  tests/zero-downtime/keeper-zero-downtime.js 2>&1 | Tee-Object tests/zero-downtime/results/after-log.txt
 ```
-HTTPS가 아직이면 `BASE_URL`에 `http://<ALB 주소>`를 넣습니다.
+- 주소는 **도메인(https://travelsafe.click)**으로 씁니다. ALB 주소(http)로 보내면 https로 넘어가면서 인증서 이름이 맞지 않아 전부 연결 실패가 납니다(11/24 미리 시험에서 확인).
+- CSV의 `http_req_duration` 줄 하나가 요청 하나입니다. `timestamp`(유닉스 초)와 `status`, `name`(주소)으로 실패 시각을 찾습니다.
+
+## 측정 전 확인 (13:50까지)
+```powershell
+# 파드가 모두 Running·Ready인지
+kubectl -n keeper get pods
+# ALB에 WAF가 붙어 있는지: 결과에 wafv2-acl-arn 이 보여야 함 (값은 기록하지 않음)
+kubectl -n keeper get ingress keeper -o jsonpath="{.metadata.annotations}" | Select-String wafv2
+# 사이트가 200인지
+curl.exe -sI https://travelsafe.click | Select-String "HTTP/"
+```
 
 ## 11/25 순서 (늦어지면 같은 간격으로 밂)
+restart 명령: `kubectl -n keeper rollout restart deployment/keeper-web deployment/keeper-api` (한 번에 web·api가 하나씩 교체됨).
+1번만 하면 교체 구간에 들어가는 요청이 수십 건뿐이라 문제가 있어도 0건이 나올 수 있어서, 단계마다 3번 합니다(SOC 의견).
 | 시각 | 할 일 | 누가 |
 | --- | --- | --- |
 | 13:55 | WAF rate-limit 규칙 Block → Count, 변경 기록 시트에 기록 | 조장, SOC |
-| 14:00~14:10 | **Before**: k6 시작 → 14:03 `kubectl -n keeper rollout restart deployment/keeper-web deployment/keeper-api` → 14:10 종료 | WEB, 조장 |
-| 14:10 | 차트 PR 병합 → 자동 배포(helm upgrade). 배포가 끝난 것을 확인 | 조장 |
-| 배포 끝난 뒤 10분 | **After**: k6 시작 → 3분 뒤 restart → 10분에 종료 | WEB, 조장 |
+| 14:00~14:10 | **Before**: k6 시작 → restart **3번** (14:03, 14:06, 14:09) → 14:10 k6 종료 | WEB, 조장 |
+| 14:10 | 차트 PR 병합 → 자동 배포(빌드·Trivy·helm upgrade) | 조장 |
+| 배포가 끝나고 파드가 모두 Ready | `kubectl -n keeper rollout status deployment/keeper-web` (api·vault도) 완료 확인 후 시작 시각 공유 | 조장, WEB |
+| 그때부터 10분 | **After**: k6 시작(T) → restart 3번 (T+3, T+6, T+9분) → T+10 k6 종료 | WEB, 조장 |
 | 14:35 | rate-limit 규칙 Count → Block 복구 | 조장 |
 | 끝난 뒤 | 결과(요청 수·실패 수·응답 시간·실제 시작/종료 시각) 공유 | WEB → SOC |
 
