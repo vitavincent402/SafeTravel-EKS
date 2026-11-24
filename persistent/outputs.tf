@@ -36,3 +36,8 @@ output "ses_dkim_records" {
     for t in aws_sesv2_email_identity.domain[0].dkim_signing_attributes[0].tokens : "${t}._domainkey.${var.domain_name} -> ${t}.dkim.amazonses.com"
   ] : []
 }
+
+output "alert_topic_arn" {
+  description = "메인 스택 terraform.tfvars의 alert_topic_arn (가용성 감시 알림 주제)"
+  value       = aws_sns_topic.alerts.arn
+}

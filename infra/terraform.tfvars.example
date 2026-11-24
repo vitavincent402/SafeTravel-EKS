@@ -29,3 +29,7 @@ run_bootstrap_deploy = true
 #   web = { arn = "arn:aws:iam::<계정ID>:user/keeper-web",    level = "viewer" }
 #   red = { arn = "arn:aws:iam::<계정ID>:user/keeper-red", level = "viewer" }
 # }
+
+# 가용성 감시 (monitoring.tf, WEB 담당). 첫 apply에서는 끄고, 따로 한 번 켜서 시험한 뒤 리허설부터 켠다
+# monitoring_enabled = true
+# alert_topic_arn    = "<persistent 출력 alert_topic_arn>"

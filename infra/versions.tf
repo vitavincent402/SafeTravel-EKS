@@ -22,6 +22,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.4"
     }
+    archive = {
+      source  = "hashicorp/archive" # 가용성 감시 스크립트를 zip으로 묶음 (monitoring.tf)
+      version = "~> 2.7"
+    }
   }
 }
 
