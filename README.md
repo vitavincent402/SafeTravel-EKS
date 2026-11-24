@@ -24,6 +24,7 @@ charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값)
   templates/networkpolicy.yaml  기본 거부 + 허용 경로 5개
 apps/web, apps/api, apps/vault  임시 앱 (각 담당이 실제 코드로 교체)
 .github/workflows/deploy.yml    빌드 → Trivy → ECR → Helm 패키지 → helm upgrade
+docs/                       역할별 문서 폴더 (was·db·soc·web·red·common)
 ```
 
 ## 처음 한 번 준비
