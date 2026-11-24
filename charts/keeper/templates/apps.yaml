@@ -32,6 +32,11 @@ spec:
       labels:
         app: keeper-{{ $name }}
         {{- include "keeper.labels" $root | nindent 8 }}
+      {{- if eq $name "web" }}
+      annotations:
+        # 로그인 설정 값이 바뀌면 web 파드를 새로 띄움 (subPath 마운트는 자동 갱신되지 않음)
+        checksum/auth-config: {{ include (print $root.Template.BasePath "/web-auth-config.yaml") $root | sha256sum }}
+      {{- end }}
     spec:
       serviceAccountName: keeper-{{ $name }}
       # 노드 두 대(AZ 두 곳)에 나눠 배치
@@ -100,9 +105,21 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if and (eq $name "web") $root.Values.cognito.loginDomain $root.Values.cognito.clientId }}
+            # 화면의 로그인 설정을 ConfigMap 값으로 덮어씀 (비어 있으면 이미지 안의 빈 파일 → 체험 모드)
+            - name: auth-config
+              mountPath: /usr/share/nginx/html/js/auth-config.js
+              subPath: auth-config.js
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if and (eq $name "web") $root.Values.cognito.loginDomain $root.Values.cognito.clientId }}
+        - name: auth-config
+          configMap:
+            name: keeper-web-auth-config
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

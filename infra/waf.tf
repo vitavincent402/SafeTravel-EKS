@@ -58,8 +58,16 @@ resource "aws_wafv2_web_acl" "keeper" {
   rule {
     name     = "rate-limit"
     priority = 3
+    # rate_limit_action=count 는 무중단 배포 측정(k6)처럼 요청이 많은 시험 동안만 쓰고, 끝나면 block으로 되돌린다
     action {
-      block {}
+      dynamic "block" {
+        for_each = var.rate_limit_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.rate_limit_action == "count" ? [1] : []
+        content {}
+      }
     }
     statement {
       rate_based_statement {

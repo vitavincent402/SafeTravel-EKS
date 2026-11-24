@@ -78,6 +78,17 @@ variable "sa_guard_deny" {
   default     = false
 }
 
+variable "rate_limit_action" {
+  description = "WAF rate-limit 규칙의 동작. block(기본) 또는 count(차단하지 않고 집계만). count는 부하 측정 시간에만 쓰고 끝나면 block으로 되돌린다"
+  type        = string
+  default     = "block"
+
+  validation {
+    condition     = contains(["block", "count"], var.rate_limit_action)
+    error_message = "rate_limit_action은 block 또는 count 중 하나여야 합니다."
+  }
+}
+
 variable "hardening" {
   description = "보안 통제를 켤지. true(기본)=전부 적용. false=Before 시연용으로 일부 통제를 끈 채 구축하고 점검한 뒤, true로 다시 apply해 After를 점검. 실제 서비스·평가용 구축은 반드시 true"
   type        = bool
