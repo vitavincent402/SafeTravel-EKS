@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>내 금고 | SafeTravel Keeper</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="mockbar" class="mockbar" hidden></div>
+<header class="site">
+  <a class="brand" href="/"><img src="/img/logo.svg" alt="">SafeTravel <b>Keeper</b></a>
+  <nav id="topbar" class="topbar"></nav>
+</header>
+
+<!-- 보호자 열람 요청 알림: 5초마다 확인해서 요청이 있으면 나타난다 -->
+<div id="reqbar" class="reqbar" role="alert" hidden>
+  <div class="reqcard">
+    <div class="ico" id="reqIco">🔔</div>
+    <div class="txt">
+      <p class="t" id="reqText"></p>
+      <p class="s" id="reqHint">거부하지 않으면 시간이 끝날 때 비상 상태로 바뀌고, 보호자가 서류를 볼 수 있어요.</p>
+    </div>
+    <div class="timer" id="reqRow">남은 시간<b id="reqLeft">-</b></div>
+    <button id="denyBtn" type="button" class="btn">거부하기</button>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="grid2">
+    <section id="statusCard" class="card status">
+      <div class="status-ico" id="stateIco">🛡️</div>
+      <h2><span id="stateTitle">확인 중</span> <span id="stateBadge" class="pill">-</span></h2>
+      <p class="desc" id="stateText"></p>
+      <div id="sosArea">
+        <div class="sos-wrap" id="sosWrap"><button id="sosBtn" type="button" class="sos">SOS<small>긴급 도움 요청</small></button></div>
+        <p class="sos-hint" id="sosHint">누르면 한 번 더 확인한 뒤 보내요.</p>
+        <div id="sosConfirm" class="confirm" hidden>
+          <p>SOS를 보내면 바로 <b>비상 상태</b>가 되고, 보호자가 서류를 열람할 수 있어요.</p>
+          <div class="row"><button id="sosYes" type="button" class="btn danger">SOS 보내기</button>
+          <button id="sosNo" type="button" class="btn">취소</button></div>
+        </div>
+      </div>
+      <div id="calmArea" hidden>
+        <button id="calmBtn" type="button" class="btn">괜찮아요, 비상 해제</button>
+        <div id="calmConfirm" class="confirm calm" hidden>
+          <p>해제하면 <b>평소 상태</b>로 돌아가고, 보호자의 열람도 바로 끝나요.</p>
+          <div class="row"><button id="calmYes" type="button" class="btn primary">비상 해제</button>
+          <button id="calmNo" type="button" class="btn">취소</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>🤝 내 보호자 <span id="gdCount" class="count">0</span></h2>
+      <p class="desc">비상일 때 내 서류를 볼 수 있는 사람이에요. 보호자도 Keeper에 가입한 이메일이어야 해요.</p>
+      <ul id="gdList" class="gdlist"><li class="empty">불러오는 중...</li></ul>
+      <form id="gdForm" class="gdform">
+        <label class="field">보호자 이메일<input id="gdEmail" name="email" type="email" maxlength="254" required placeholder="guardian@example.com" autocomplete="off"></label>
+        <button type="submit" class="btn primary">보호자 등록</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>🗂️ 내 서류함 <span id="docCount" class="count">0</span></h2>
+      <ul id="docList" class="docgrid"><li class="empty">불러오는 중...</li></ul>
+
+      <form id="upForm" class="upload">
+        <h3>서류 올리기</h3>
+        <label class="drop" for="upFile"><span class="ico">📤</span>
+          <span><span id="upName">파일 고르기</span><small>PNG·JPEG·WEBP·PDF, 5MB까지</small></span>
+          <input id="upFile" name="file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.png,.jpg,.jpeg,.webp,.pdf" required></label>
+        <label class="field">제목<input id="upTitle" name="title" maxlength="40" placeholder="예: 여권 사본"></label>
+        <button type="submit" class="btn primary">올리기</button>
+        <p class="hint">실제 개인 서류는 올리지 마세요. 가짜 샘플(SAMPLE)만 씁니다.</p>
+      </form>
+    </section>
+  </div>
+</main>
+
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><b id="modalTitle"></b><button id="modalClose" type="button" class="btn small">닫기</button></div>
+    <div class="modal-body"><img id="modalImg" alt="">
+      <div id="modalPdf" class="pdfbox" hidden><span class="ico">📄</span><p>PDF 서류예요. 새 탭에서 열어 확인하세요.</p>
+        <a id="modalPdfLink" class="btn primary" target="_blank" rel="noopener">새 탭에서 열기</a></div></div>
+    <p id="modalFoot" class="modal-foot"></p>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="/js/auth-config.js"></script>
+<script src="/js/cognito.js"></script>
+<script src="/js/api-client.js"></script>
+<script src="/js/mock-api.js"></script>
+<script src="/js/keeper-api.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/traveler.js"></script>
+</body>
+</html>
