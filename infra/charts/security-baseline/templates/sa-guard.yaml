@@ -46,7 +46,9 @@ spec:
   validations:
     - expression: >-
         !(variables.saName.startsWith('keeper-') || variables.saLegacy.startsWith('keeper-'))
-        || variables.user.startsWith('system:serviceaccount:kube-system:')
+        {{- range .Values.saGuard.controllers }}
+        || variables.user == {{ printf "system:serviceaccount:kube-system:%s" . | squote }}
+        {{- end }}
         {{- range .Values.saGuard.deployers }}
         || variables.user.startsWith({{ . | squote }})
         {{- end }}
