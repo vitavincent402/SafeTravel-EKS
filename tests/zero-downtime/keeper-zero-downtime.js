@@ -78,7 +78,7 @@ export default function () {
   const server = String(res.headers["Server"] || "");
   if (res.status !== 0 && (res.headers["Via"] || res.headers["X-Amz-Cf-Id"] || (server && !/^nginx/i.test(server)))) {
     invalid.add(1, { path });
-    console.warn(`INVALID ${new Date().toISOString()} ${path} status=${res.status} server=${server || "-"} (EKS가 아닌 곳이 답함, 재측정 필요)`);
+    console.warn(`INVALID ${new Date().toISOString()} ${path} status=${res.status} ip=${res.remote_ip || "-"} server=${server || "-"} (EKS가 아닌 곳이 답함, 재측정 필요)`);
     return;
   }
   const good = res.status === 200;
@@ -89,7 +89,8 @@ export default function () {
     if (WAF_CODES.indexOf(res.status) >= 0) { failWaf.add(1, { path }); }
     else if (DEPLOY_CODES.indexOf(res.status) >= 0) { failDeploy.add(1, { path }); }
     // 실패 시각을 초 단위로 남긴다 (SOC 로그·restart 시각과 맞춰 보기 위해)
-    console.warn(`FAIL ${new Date().toISOString()} ${path} status=${res.status}${res.error ? " error=" + res.error : ""}`);
+    // 접속한 IP를 같이 남겨, 그 시각의 ALB IP(측정 전 nslookup)와 다르면 DNS 탓, 같으면 서비스 탓으로 가른다
+    console.warn(`FAIL ${new Date().toISOString()} ${path} status=${res.status} ip=${res.remote_ip || "-"}${res.error ? " error=" + res.error : ""}`);
   }
 }
 

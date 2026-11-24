@@ -48,9 +48,16 @@ kubectl -n keeper get pods
 kubectl -n keeper get ingress keeper -o jsonpath="{.metadata.annotations}" | Select-String wafv2
 # 사이트가 200인지
 curl.exe -sI https://travelsafe.click | Select-String "HTTP/"
+# 이 시각의 ALB IP 기록 (FAIL·INVALID 줄의 ip= 와 비교해 DNS 탓인지 서비스 탓인지 가름)
+nslookup travelsafe.click 8.8.8.8
 # 도메인이 EKS(nginx)로 가는지: Server: nginx 여야 함. AmazonS3·cloudfront가 보이면 DNS가 아직 옛 2.5차 사이트로 감 (11/24 발견)
 curl.exe -4 -s -D - -o NUL https://travelsafe.click/ | Select-String "Server|Via"
 ```
+
+## DNS와 실패 구분
+- 도메인은 Route 53 **A 별칭(alias)** 레코드로 ALB에 연결됩니다(infra/dns.tf, CNAME 아님). 별칭은 TTL을 따로 정하지 않고 ALB 레코드의 TTL(60초)을 따릅니다.
+- 재구축 때마다 ALB가 새로 생기고 별칭도 apply 마지막(앱 배포 뒤)에 다시 걸립니다. 하루 안에서는 ALB가 바뀌지 않으므로 **측정 중에 DNS가 바뀌지는 않습니다.** 재구축 직후 1~2분은 전날 ALB 주소가 남을 수 있어, 측정은 재구축 뒤 충분히 지나서 합니다.
+- FAIL 줄의 `ip=`가 측정 전에 기록한 ALB IP와 같으면 서비스 문제, 다르면 DNS 문제입니다. EKS가 아닌 곳이 답하면 무효로 따로 셉니다.
 
 ## 11/25 순서 (늦어지면 같은 간격으로 밂)
 restart 명령: `kubectl -n keeper rollout restart deployment/keeper-web deployment/keeper-api` (한 번에 web·api가 하나씩 교체됨).
