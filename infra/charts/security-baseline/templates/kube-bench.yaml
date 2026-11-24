@@ -1,0 +1,84 @@
+{{- /*
+  kube-bench 정기 점검 (멘토 키트 s4 k8s/audit/00-audit-namespace.yaml, k8s/after/50-kube-bench-cronjob.yaml)
+  kube-bench는 노드 설정 파일을 읽어야 해서 hostPID·hostPath가 필요합니다.
+  → 점검 전용 네임스페이스에서만 허용하고(예외 구역을 분리), 파일은 읽기 전용으로만 연결합니다.
+  지금 바로 점검: kubectl create job kb-now --from=cronjob/kube-bench-daily -n security-audit
+  결과 보기:      kubectl logs job/kb-now -n security-audit
+*/ -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-audit
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-bench
+  namespace: security-audit
+---
+# 정책 점검(CIS 4.x)용 읽기 전용 권한. 쓰기·Secret 조회 없음
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: keeper-kube-bench-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods, serviceaccounts, namespaces]
+    verbs: [get, list]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings, clusterroles, clusterrolebindings]
+    verbs: [get, list]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: keeper-kube-bench-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: keeper-kube-bench-reader
+subjects:
+  - kind: ServiceAccount
+    name: kube-bench
+    namespace: security-audit
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube-bench-daily
+  namespace: security-audit
+spec:
+  schedule: {{ .Values.kubeBench.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels: { app: kube-bench }
+        spec:
+          serviceAccountName: kube-bench
+          hostPID: true                       # 노드의 kubelet 실행 인자 확인용
+          restartPolicy: Never
+          containers:
+            - name: kube-bench
+              image: {{ .Values.kubeBench.image }}
+              command: [kube-bench, run, --targets, "node,policies,managedservices,controlplane", --benchmark, {{ .Values.kubeBench.benchmark }}]
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 256Mi }
+              volumeMounts:                   # 노드 설정 파일은 읽기 전용으로만
+                - { name: var-lib-kubelet, mountPath: /var/lib/kubelet, readOnly: true }
+                - { name: etc-systemd, mountPath: /etc/systemd, readOnly: true }
+                - { name: etc-kubernetes, mountPath: /etc/kubernetes, readOnly: true }
+          volumes:
+            - { name: var-lib-kubelet, hostPath: { path: /var/lib/kubelet } }
+            - { name: etc-systemd, hostPath: { path: /etc/systemd } }
+            - { name: etc-kubernetes, hostPath: { path: /etc/kubernetes } }

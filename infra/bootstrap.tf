@@ -107,6 +107,7 @@ resource "terraform_data" "bootstrap_deploy" {
   depends_on = [
     helm_release.lbc,
     kubernetes_namespace.keeper,
+    helm_release.security_baseline, # 입장 정책이 먼저 걸린 상태에서 앱을 배포
     aws_iam_role_policy.github_actions,
     aws_ecr_repository.this,
     aws_db_instance.keeper,

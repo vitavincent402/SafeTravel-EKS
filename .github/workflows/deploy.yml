@@ -51,9 +51,9 @@ jobs:
 
       - name: Trivy 이미지 검사 (HIGH·CRITICAL이 있으면 중단)
         run: |
-          # 발표 전 버전을 고정하세요 (예: aquasec/trivy:0.57.1)
+          # 버전 고정: latest를 쓰면 같은 코드도 날마다 결과가 달라질 수 있음
           for app in web api vault; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.2 \
               image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress \
               "$REGISTRY/keeper/$app:$TAG"
           done

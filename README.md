@@ -17,6 +17,7 @@ infra/                      Terraform (WAS: VPC·EKS·데이터·WAF / SOC: IAM�
   dns.tf                    ACM 인증서, Route 53 레코드 (도메인 있을 때만)
   addons.tf                 AWS Load Balancer Controller
   bootstrap.tf              apply 마지막 단계: 파이프라인 실행·대기 / destroy 첫 단계: 앱 삭제
+  security.tf               보안 기준선: 입장 정책 4종 + kube-bench 정기 점검 (charts/security-baseline)
   outputs.tf
 charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값)
   templates/apps.yaml       web·api·vault 각각 ServiceAccount + Deployment + Service
@@ -24,6 +25,8 @@ charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값)
   templates/networkpolicy.yaml  기본 거부 + 허용 경로 5개
 apps/web, apps/api, apps/vault  임시 앱 (각 담당이 실제 코드로 교체)
 .github/workflows/deploy.yml    빌드 → Trivy → ECR → Helm 패키지 → helm upgrade
+tests/attack/               위험 파드 예시 4종 (서버 dry-run 전용, 모두 거부되어야 정상)
+scripts/security-check.ps1  보안 자체 점검 19항목 → evidence/ 에 결과 저장
 ```
 
 ## 처음 한 번 준비
@@ -79,3 +82,27 @@ terraform destroy      # 앱 삭제 → ALB 정리 → 인프라 삭제 순서�
 - 도메인을 쓰면 Route 53 호스팅 영역이 먼저 있어야 함
 
 이 코드는 `terraform validate`와 `helm lint`·`helm template`까지만 확인했고, 실제 AWS 계정에서 apply는 아직 해 보지 않았습니다.
+
+## 보안 점검
+
+멘토 키트(hannctl_mentoring)의 s3·s4·s5 시나리오에서 우리 구조에 없던 통제를 가져와 적용했습니다.
+
+| 통제 | 위치 | 출처 |
+|---|---|---|
+| 노드 IMDSv2 + hop limit 1, 노드 디스크 암호화 | `infra/eks.tf` | s4·s5 `cfn/stack.yaml` |
+| EKS 감사 로그(audit·api·authenticator) 명시 | `infra/eks.tf` | s4 감사 로그 |
+| default ServiceAccount 토큰 자동 마운트 끔 | `infra/eks.tf` | s4 CIS 4.1.5 |
+| 입장 정책: privileged·hostPath·root 금지, 우리 ECR 이미지만 허용 | `infra/charts/security-baseline` | `_shared/k8s/kyverno-baseline.yaml`, s3 `trusted-registry.yaml` |
+| kube-bench(CIS EKS) 정기 점검 CronJob | `infra/charts/security-baseline` | s4 `kube-bench-cronjob.yaml` |
+| Trivy 버전 고정 | `.github/workflows/deploy.yml` | s3 CI 예시 |
+| 위험 파드 dry-run 예시 | `tests/attack/` | 각 시나리오 `k8s/attack` |
+| 보안 자체 점검 스크립트 | `scripts/security-check.ps1` | s4 `checks/cluster_checks.py` |
+
+입장 정책은 멘토 키트의 Kyverno 정책과 같은 CEL 식을 쓰되, 쿠버네티스 내장 기능(ValidatingAdmissionPolicy)으로 적용해 추가 파드·웹훅 없이 동작합니다.
+
+```powershell
+$env:AWS_PROFILE = "keeper"
+powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1      # 19항목 점검 → evidence\
+kubectl create job kb-now --from=cronjob/kube-bench-daily -n security-audit   # CIS 점검 즉시 실행
+kubectl logs job/kb-now -n security-audit
+```

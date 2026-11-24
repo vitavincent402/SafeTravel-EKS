@@ -1,0 +1,67 @@
+{{- /*
+  위험한 파드를 "생성 전에" 거부하는 정책 4개.
+  CEL 식은 멘토 키트 _shared/k8s/kyverno-baseline.yaml, s3 trusted-registry.yaml과 같습니다.
+  validationActions를 [Audit]로 바꾸면 거부하지 않고 감사 로그에만 남깁니다.
+*/ -}}
+{{- if not .Values.protectedNamespaces }}{{ fail "protectedNamespaces가 비어 있습니다" }}{{ end -}}
+{{- $nsList := .Values.protectedNamespaces -}}
+{{- $reg := required "trustedRegistryPrefix가 비어 있습니다" .Values.trustedRegistryPrefix -}}
+{{- $policies := list
+  (dict "name" "keeper-disallow-privileged" "title" "특권(privileged) 컨테이너 금지"
+        "expr" "object.spec.containers.all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || !c.securityContext.privileged) && (!has(object.spec.initContainers) || object.spec.initContainers.all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || !c.securityContext.privileged))"
+        "msg" "[keeper] privileged 컨테이너는 허용되지 않습니다.")
+  (dict "name" "keeper-disallow-host-path" "title" "hostPath 볼륨 금지"
+        "expr" "!has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))"
+        "msg" "[keeper] hostPath 볼륨(노드 파일시스템 연결)은 허용되지 않습니다.")
+  (dict "name" "keeper-require-run-as-non-root" "title" "root 실행 금지"
+        "expr" "object.spec.containers.all(c, ((has(c.securityContext) && has(c.securityContext.runAsNonRoot)) ? c.securityContext.runAsNonRoot : variables.podNonRoot) && ((has(c.securityContext) && has(c.securityContext.runAsUser)) ? c.securityContext.runAsUser != 0 : !variables.podRootUid))"
+        "msg" "[keeper] runAsNonRoot=true 이고 root(UID 0)가 아니어야 합니다.")
+  (dict "name" "keeper-trusted-registry-only" "title" "우리 ECR 이미지만 허용 (공급망 보안)"
+        "expr" (printf "object.spec.containers.all(c, c.image.startsWith('%s')) && (!has(object.spec.initContainers) || object.spec.initContainers.all(c, c.image.startsWith('%s')))" $reg $reg)
+        "msg" (printf "[keeper] 승인된 레지스트리(%s*) 이미지만 허용됩니다. CI(Trivy 검사)를 거친 이미지만 배포하세요." $reg))
+}}
+{{- range $p := $policies }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $p.name }}
+  annotations:
+    keeper.io/title: {{ $p.title | quote }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  {{- if eq $p.name "keeper-require-run-as-non-root" }}
+  variables:
+    # 파드 수준 설정 (컨테이너에 값이 없으면 이 값을 따름)
+    - name: podNonRoot
+      expression: "has(object.spec.securityContext) && has(object.spec.securityContext.runAsNonRoot) && object.spec.securityContext.runAsNonRoot"
+    - name: podRootUid
+      expression: "has(object.spec.securityContext) && has(object.spec.securityContext.runAsUser) && object.spec.securityContext.runAsUser == 0"
+  {{- end }}
+  validations:
+    - expression: {{ $p.expr | quote }}
+      message: {{ $p.msg | quote }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $p.name }}
+spec:
+  policyName: {{ $p.name }}
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            {{- range $nsList }}
+            - {{ . | quote }}
+            {{- end }}
+{{- end }}

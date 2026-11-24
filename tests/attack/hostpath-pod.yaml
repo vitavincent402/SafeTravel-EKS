@@ -1,0 +1,11 @@
+# 위험 2: 노드 루트 파일시스템(hostPath /) 연결 - 서버 dry-run 으로만 시도
+apiVersion: v1
+kind: Pod
+metadata: { name: keeper-attack-hostpath }
+spec:
+  containers:
+    - name: c
+      image: public.ecr.aws/docker/library/busybox:1.37
+      command: [sleep, "3600"]
+      volumeMounts: [{ name: host, mountPath: /host }]
+  volumes: [{ name: host, hostPath: { path: / } }]

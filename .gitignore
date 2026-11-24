@@ -10,3 +10,6 @@ env-values.yaml
 
 # 압축 원본 (지워도 됨)
 _keeper.zip
+
+# 보안 점검 결과 (scripts/security-check.ps1)
+evidence/

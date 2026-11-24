@@ -53,6 +53,12 @@ module "eks" {
   # 접속은 IAM 인증을 통과한 역할만 가능하고, GitHub 역할은 keeper 네임스페이스 권한만 받습니다.
   cluster_endpoint_public_access = true
 
+  # 감사 로그: 누가 클러스터 API에 무엇을 요청했는지 CloudWatch Logs에 남깁니다 (CIS EKS 2.1.1).
+  # 모듈 기본값과 같지만 코드에서 보이도록 명시하고, 보존 기간만 90일 → 7일로 줄였습니다(비용).
+  # 로그 그룹은 destroy 때 같이 지워지므로, 증적이 필요하면 destroy 전에 내보내세요.
+  cluster_enabled_log_types              = ["api", "audit", "authenticator"]
+  cloudwatch_log_group_retention_in_days = 7
+
   # terraform apply를 실행한 사람(역할)에게 클러스터 관리자 권한
   enable_cluster_creator_admin_permissions = true
 
@@ -81,6 +87,28 @@ module "eks" {
       min_size       = 2
       max_size       = 3
       desired_size   = 2
+
+      # IMDSv2 강제 + hop limit 1: 파드가 노드의 메타데이터(169.254.169.254)에 접근해
+      # 노드 IAM 역할 자격 증명을 훔치는 경로를 막습니다. 파드는 IRSA로 자기 역할만 받습니다.
+      # (모듈 기본값은 hop limit 2 → 파드에서도 노드 자격 증명이 보임)
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 1
+      }
+
+      # 노드 디스크 암호화
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 20
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
     }
   }
 
@@ -114,4 +142,13 @@ resource "kubernetes_namespace" "keeper" {
   }
 
   depends_on = [module.eks]
+}
+
+# keeper 네임스페이스의 default ServiceAccount는 API 토큰을 자동으로 붙이지 않음 (CIS EKS 4.1.5)
+# 앱은 차트에서 만든 전용 ServiceAccount(keeper-web/api/vault)를 씁니다.
+resource "kubernetes_default_service_account_v1" "keeper" {
+  metadata {
+    namespace = kubernetes_namespace.keeper.metadata[0].name
+  }
+  automount_service_account_token = false
 }
