@@ -30,7 +30,9 @@ const okRate = new Rate("keeper_ok");
 const failed = new Counter("keeper_failed");          // 모든 실패
 const failDeploy = new Counter("keeper_fail_deploy");  // 502·503·504·500·0(연결 실패·시간 초과)
 const failWaf = new Counter("keeper_fail_waf");        // 403·429
-const wrongOrigin = new Counter("keeper_wrong_origin"); // 우리 nginx(EKS)가 아닌 곳이 답함 (예: 2.5차 CloudFront)
+// 무효: 우리 nginx(EKS)가 아닌 곳이 답한 응답 (예: DNS 캐시로 간 옛 2.5차 CloudFront).
+// 성공·실패 어디에도 넣지 않고 따로 센다. 1건이라도 있으면 그 구간은 재측정한다 (SOC 요청)
+const invalid = new Counter("keeper_invalid");
 const DEPLOY_CODES = [0, 500, 502, 503, 504];
 const WAF_CODES = [403, 429];
 const latency = new Trend("keeper_latency", true);
@@ -42,7 +44,7 @@ STATUSES.forEach((s) => { thresholds[`keeper_failed{status:${s}}`] = ["count>=0"
 // 403·429는 WAF 차단이라 합쳐서 WAF_STOP 건이 되면 시험을 멈춘다 (SOC 요청: 걸리면 바로 중단하고 알림)
 thresholds.keeper_fail_waf = [{ threshold: `count<${WAF_STOP}`, abortOnFail: true }];
 thresholds.keeper_fail_deploy = ["count>=0"];
-thresholds.keeper_wrong_origin = ["count>=0"];
+thresholds.keeper_invalid = ["count>=0"];
 PATHS.forEach((p) => { thresholds[`keeper_failed{path:${p}}`] = ["count>=0"]; });
 
 export const options = {
@@ -72,15 +74,16 @@ export function setup() {
 export default function () {
   const path = PATHS[exec.scenario.iterationInTest % PATHS.length];
   const res = http.get(BASE + path, { timeout: "10s", tags: { path } });
+  // DNS가 아직 옛 2.5차 CloudFront를 가리키면 결과가 섞인다 (11/24 발견) → 무효로 따로 세고 판정에서 뺀다
+  const server = String(res.headers["Server"] || "");
+  if (res.status !== 0 && (res.headers["Via"] || res.headers["X-Amz-Cf-Id"] || (server && !/^nginx/i.test(server)))) {
+    invalid.add(1, { path });
+    console.warn(`INVALID ${new Date().toISOString()} ${path} status=${res.status} server=${server || "-"} (EKS가 아닌 곳이 답함, 재측정 필요)`);
+    return;
+  }
   const good = res.status === 200;
   okRate.add(good, { path });
   latency.add(res.timings.duration, { path });
-  // DNS가 아직 옛 2.5차 CloudFront를 가리키면 결과가 섞인다 (11/24 발견). 그런 응답은 따로 센다
-  const server = String(res.headers["Server"] || "");
-  if (res.status !== 0 && (res.headers["Via"] || res.headers["X-Amz-Cf-Id"] || (server && !/^nginx/i.test(server)))) {
-    wrongOrigin.add(1, { path });
-    console.warn(`WRONG-ORIGIN ${new Date().toISOString()} ${path} server=${server || "-"} (EKS가 아닌 곳이 답함)`);
-  }
   if (!good) {
     failed.add(1, { path, status: String(res.status) });
     if (WAF_CODES.indexOf(res.status) >= 0) { failWaf.add(1, { path }); }
@@ -109,11 +112,12 @@ export function handleSummary(data) {
     `끝난 시각: ${new Date().toISOString()}`,
     `대상: ${BASE}   속도: 초당 ${RATE}건   시간: ${DURATION}`,
     ``,
-    `전체 요청: ${reqs}건`,
+    `전체 요청: ${reqs}건 (무효 포함)`,
     `실패: ${fails}건 (${reqs ? ((fails / reqs) * 100).toFixed(2) : "0.00"}%)`,
     `  배포 영향 (502·503·504·500·연결 실패): ${count(data, "keeper_fail_deploy")}건   ← 무중단 판단 기준`,
     `  WAF 영향 (403·429): ${count(data, "keeper_fail_waf")}건`,
-    `EKS가 아닌 곳의 응답 (DNS가 옛 사이트로 감): ${count(data, "keeper_wrong_origin")}건   ← 0이 아니면 결과를 믿을 수 없음`,
+    `무효 (EKS가 아닌 곳의 응답, 성공·실패에서 뺌): ${count(data, "keeper_invalid")}건`,
+    count(data, "keeper_invalid") > 0 ? `→ 무효가 있어 이 구간은 재측정해야 합니다.` : `→ 무효 0건: 이 구간의 결과를 그대로 씁니다.`,
     `응답 시간: 평균 ${ms(lat.avg)}, p95 ${ms(lat["p(95)"])}, p99 ${ms(lat["p(99)"])}, 최대 ${ms(lat.max)}`,
     ``,
     `상태 코드별 실패 (0 = 연결 실패·시간 초과):`,
