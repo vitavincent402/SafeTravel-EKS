@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafeTravel Keeper · 여행 중 서류 금고</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="mockbar" class="mockbar" hidden></div>
+<header class="site">
+  <a class="brand" href="/"><img src="/img/logo.svg" alt="">SafeTravel <b>Keeper</b></a>
+</header>
+
+<section class="hero">
+  <div class="hero-in">
+    <div>
+      <span class="eyebrow">SafeTravel의 다음 이야기 · 여행 중</span>
+      <h1>여행 중 서류는<br><em>Keeper 금고</em>에</h1>
+      <p class="lead">여권 사본과 보험증을 암호화해 보관하고, 비상일 때만 가족이 정해진 시간 동안 열어 볼 수 있어요.</p>
+      <div id="loginArea" class="actions"></div>
+      <p id="loginMsg" class="note-line" role="status"></p>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <div class="blob"></div>
+      <img class="mascot" src="/img/mohum.svg" alt="">
+      <div class="float f1"><i>🔒</i>평소에는 나만</div>
+      <div class="float f2"><i>🆘</i>비상일 때 가족이</div>
+      <div class="float f3"><i>⏱️</i>시간이 끝나면 자동 잠금</div>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+  <h2 class="section-title">이렇게 동작해요</h2>
+  <p class="section-sub">휴대폰을 잃어버리거나 연락이 끊겨도, 가족이 꼭 필요한 서류를 볼 수 있어요.</p>
+  <ol class="steps">
+    <li><h3>서류 보관</h3><p>여권 사본·보험증을 올리면 암호화되어 금고에 들어가요.</p></li>
+    <li class="warn"><h3>비상 상태</h3><p>SOS를 누르거나, 가족의 열람 요청에 정해진 시간 안에 응답이 없으면 비상이 돼요.</p></li>
+    <li><h3>가족 열람</h3><p>비상일 때만 가족에게 짧은 시간짜리 열람권이 나와요.</p></li>
+    <li><h3>자동 잠금 · 기록</h3><p>시간이 끝나면 닫히고, 누가 언제 열었는지 모두 남아요.</p></li>
+  </ol>
+
+  <div class="features">
+    <div class="feature"><div class="ico">🛡️</div><h3>금고 담당만 열쇠를</h3><p>서류를 풀 수 있는 건 금고(vault) 서비스뿐이에요. 다른 곳이 뚫려도 서류는 열리지 않아요.</p></div>
+    <div class="feature"><div class="ico">🙋</div><h3>거부할 수 있어요</h3><p>가족이 요청하면 화면 위에 알림이 떠요. 괜찮다면 바로 거부하면 돼요.</p></div>
+    <div class="feature"><div class="ico">🧾</div><h3>모든 열람은 기록</h3><p>열람·거부는 감사 기록에 남고, 관제 팀이 함께 확인해요.</p></div>
+  </div>
+
+  <p class="notice">교육용 프로젝트예요. 실제 개인 서류는 올리지 말고 가짜 샘플(SAMPLE)만 써 주세요.</p>
+</main>
+<footer class="foot">SafeTravel Keeper · 3조 3차 프로젝트</footer>
+
+<script src="/js/auth-config.js"></script>
+<script src="/js/cognito.js"></script>
+<script src="/js/api-client.js"></script>
+<script src="/js/mock-api.js"></script>
+<script src="/js/keeper-api.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/index.js"></script>
+</body>
+</html>

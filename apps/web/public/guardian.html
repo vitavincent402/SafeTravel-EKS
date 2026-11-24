@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>보호자 | SafeTravel Keeper</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="mockbar" class="mockbar" hidden></div>
+<header class="site">
+  <a class="brand" href="/"><img src="/img/logo.svg" alt="">SafeTravel <b>Keeper</b></a>
+  <nav id="topbar" class="topbar"></nav>
+</header>
+
+<main class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>내가 지키는 사람</h1>
+      <p>비상 상태일 때만 서류를 열람할 수 있어요. 모든 열람은 기록되고, 시간이 끝나면 자동으로 닫혀요.</p>
+    </div>
+  </div>
+  <div id="travelers" class="people"><p class="muted">불러오는 중...</p></div>
+</main>
+
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><b id="modalTitle"></b><button id="modalClose" type="button" class="btn small">닫기</button></div>
+    <div class="modal-body"><img id="modalImg" alt="">
+      <div id="modalPdf" class="pdfbox" hidden><span class="ico">📄</span><p>PDF 서류예요. 새 탭에서 열어 확인하세요.</p>
+        <a id="modalPdfLink" class="btn primary" target="_blank" rel="noopener">새 탭에서 열기</a></div></div>
+    <p id="modalFoot" class="modal-foot"></p>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="/js/auth-config.js"></script>
+<script src="/js/cognito.js"></script>
+<script src="/js/api-client.js"></script>
+<script src="/js/mock-api.js"></script>
+<script src="/js/keeper-api.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/guardian.js"></script>
+</body>
+</html>
