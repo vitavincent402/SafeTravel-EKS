@@ -7,6 +7,7 @@
 | Route 53 호스팅 영역 `travelsafe.click` | 이름 서버 4개를 도메인 등록 계정에 한 번 넣으면 끝. 지우고 다시 만들면 이름 서버가 바뀌어 매번 다시 넣어야 함 |
 | SES 도메인 ID + DKIM CNAME 3개 | 도메인 확인(Verified)을 매일 다시 기다리지 않기 위해 |
 | Cognito 사용자 풀·앱 클라이언트·로그인 도메인 | 회원 계정은 지우면 복구할 수 없음. 삭제 보호(`ACTIVE`)와 `prevent_destroy` |
+| 알림 주제(SNS) `keeper-alerts` + 이메일 구독 | 매일 새로 만들면 구독 확인 메일을 매일 다시 눌러야 함. 가용성 감시(`infra/monitoring.tf`)가 출력 `alert_topic_arn`으로 받아 씀 |
 
 메인 스택은 이 영역을 이름(`hosted_zone_name`)으로 찾아 쓰고, Cognito는 출력값 3개를 `terraform.tfvars`에 넣어 받습니다. 그래서 `infra/` 의 `destroy`는 이 폴더의 것을 건드리지 않습니다.
 
@@ -31,7 +32,9 @@ terraform output
    cognito_user_pool_id = "<출력 cognito_user_pool_id>"
    cognito_client_id    = "<출력 cognito_client_id>"
    cognito_login_domain = "<출력 cognito_login_domain>"
+   alert_topic_arn      = "<출력 alert_topic_arn>"   # 가용성 감시를 켤 때
    ```
+   알림 메일은 `persistent/terraform.tfvars`의 `alert_email`에 적고 apply한 뒤, 받은 메일에서 **Confirm subscription**을 한 번 누른다.
    이름 서버가 바뀌기 전에 `infra/`를 apply하면 인증서 DNS 검증이 끝나지 않아 apply가 오래 멈춘다. **이름 서버 변경이 퍼진 뒤에** 한다.
 
 ## 값을 바꿀 때
