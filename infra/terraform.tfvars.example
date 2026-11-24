@@ -25,7 +25,7 @@ run_bootstrap_deploy = true
 # 팀원 클러스터 권한 (IAM 사용자는 scripts/create-team-users.ps1 로 먼저 만들어 둔다)
 # team_members = {
 #   db  = { arn = "arn:aws:iam::<계정ID>:user/keeper-db",    level = "developer" }
-#   soc = { arn = "arn:aws:iam::<계정ID>:user/keeper-soc",    level = "developer" }
+#   soc = { arn = "arn:aws:iam::<계정ID>:user/keeper-soc",    level = "tester" }      # Secret 조회 없이 조회+파드 생성(시험)만
 #   web = { arn = "arn:aws:iam::<계정ID>:user/keeper-web",    level = "viewer" }
 #   red = { arn = "arn:aws:iam::<계정ID>:user/keeper-red", level = "tester" }   # tester = 조회 + keeper 네임스페이스 파드 생성만(공격 시험용)
 # }

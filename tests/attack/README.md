@@ -30,7 +30,7 @@ kubectl auth can-i get secrets -n keeper          # no
 kubectl auth can-i create pods/exec -n keeper     # no
 ```
 
-WAF 차단 기록은 CloudWatch Logs `aws-waf-logs-keeper`에서 본다 (조회 권한은 `scripts/grant-red-waf-logs.ps1`로 한 번 부여).
+WAF 차단 기록은 CloudWatch Logs `aws-waf-logs-keeper`에서 본다 (조회 권한은 `scripts/grant-log-read.ps1 -User keeper-red -LogGroup aws-waf-logs-keeper`로 한 번 부여).
 
 ```powershell
 aws logs filter-log-events --log-group-name aws-waf-logs-keeper --region ap-northeast-2 --filter-pattern BLOCK --max-items 20
