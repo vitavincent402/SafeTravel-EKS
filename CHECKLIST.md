@@ -16,7 +16,7 @@
   - Claude가 코드를 고치고, 다시 apply가 필요한지 알려 줍니다.
 - [ ] 노션 보안 섹션에 실제 점검 결과 기록
 - [ ] ALB → 노드 보안 그룹 허용 규칙이 실제로 생겼는지 확인
-  - 이 규칙은 Terraform이 아니라 Load Balancer Controller가 만듭니다.
+  - 점검 S12에서 ALB → web 200이 나와 경로는 열려 있습니다. 규칙 자체를 보려면 EC2 콘솔의 보안 그룹에서 확인합니다.
 - [ ] 작업 종료: terraform destroy
   - "Destroy complete!"가 나올 때까지 창을 닫지 않습니다.
 - [ ] 잔여 리소스 확인: EKS, NAT, RDS, ALB, EIP, ALB 보안 그룹
@@ -45,8 +45,8 @@
   - 알림을 받을 이메일이 필요합니다.
 - [ ] state 백업 폴더 복사가 끝났는지 확인
   - D:\SafeTravel-EKS\state-backup-1123
-- [ ] DB 담당에게 RDS 엔진 확정 요청
-  - 확정되면 data.tf의 engine, engine_version, 보안 그룹 포트를 함께 바꿉니다.
+- [ ] RDS 엔진 확정 (DB 담당이 PostgreSQL로 결정)
+  - 코드 변경은 없습니다. 이미 PostgreSQL 16으로 만들어져 있습니다.
 - [ ] HPA·Prometheus가 강사 조건에 필요한지 확인
 - [ ] WAF 차단 동작 확인
   - security-check의 S13 결과와 공격 시연에서 확인합니다.
