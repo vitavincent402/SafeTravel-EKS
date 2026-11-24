@@ -23,9 +23,9 @@ variable "web_hosts" {
 }
 
 variable "callback_paths" {
-  description = "로그인 후 돌아올 경로. 화면 담당과 정해지면 바꾼다 (예: [\"/callback.html\"]). 아직 정해지지 않았으면 \"/\"를 임시로 둔다"
+  description = "로그인 후 돌아올 경로. 화면 담당과 정한 값: /auth/callback.html"
   type        = list(string)
-  default     = ["/"]
+  default     = ["/auth/callback.html"]
 }
 
 variable "logout_paths" {
