@@ -17,6 +17,7 @@ resource "helm_release" "security_baseline" {
     trustedRegistryPrefix = "${local.ecr_registry}/keeper/"
     admissionPolicies     = { enabled = var.hardening }
     kubeBench             = { enabled = var.hardening }
+    podTester             = { enabled = true, group = local.pod_tester_group }
   })]
 
   depends_on = [module.eks, kubernetes_namespace.keeper]

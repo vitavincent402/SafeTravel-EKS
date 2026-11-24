@@ -29,6 +29,20 @@ locals {
         access_scope = { type = "cluster", namespaces = [] }
       }
     }
+    # 조회 + keeper 네임스페이스에 파드 '만들기'만 (RED 공격 시험용). 아래 access_groups의 그룹이 Role로 연결됨.
+    # 시험하는 파드는 입장 정책에서 거부되는 것을 확인하는 용도이고, Secret 조회·exec·삭제·수정 권한은 없음
+    tester = {
+      view = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+        access_scope = { type = "cluster", namespaces = [] }
+      }
+    }
+  }
+
+  # level별로 붙일 쿠버네티스 그룹 (차트 security-baseline의 pod-tester Role이 이 그룹에 묶임)
+  pod_tester_group = "keeper-pod-tester"
+  access_groups = {
+    tester = [local.pod_tester_group]
   }
 
   team_access_entries = {
@@ -36,6 +50,7 @@ locals {
       # hardening=false(Before 시연)에서는 모두 관리자, true에서는 각자의 level(최소 권한)
       principal_arn       = m.arn
       policy_associations = local.access_levels[var.hardening ? m.level : "admin"]
+      kubernetes_groups   = lookup(local.access_groups, var.hardening ? m.level : "admin", [])
     }
   }
 }

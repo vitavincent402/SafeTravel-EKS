@@ -10,3 +10,7 @@ kubeBench:
   image: docker.io/aquasec/kube-bench:v0.16.0
   benchmark: eks-1.8.0
   schedule: "0 3 * * *"        # 매일 03:00 UTC = 12:00 KST (클러스터가 켜져 있는 낮 시간)
+
+podTester:
+  enabled: true                # keeper-red(level=tester)가 위험 파드를 서버 dry-run으로 시험할 수 있게 Role을 만듦
+  group: keeper-pod-tester     # EKS access entry의 kubernetes_groups 와 같아야 함

@@ -59,7 +59,7 @@ variable "github_oidc_sub_prefix" {
 }
 
 variable "team_members" {
-  description = "팀원의 클러스터 권한. 키는 이름, arn은 IAM 사용자 ARN, level은 admin | developer | viewer"
+  description = "팀원의 클러스터 권한. 키는 이름, arn은 IAM 사용자 ARN, level은 admin | developer | viewer | tester(조회 + keeper 네임스페이스 파드 생성만, RED용)"
   type = map(object({
     arn   = string
     level = string
@@ -67,8 +67,8 @@ variable "team_members" {
   default = {}
 
   validation {
-    condition     = alltrue([for m in values(var.team_members) : contains(["admin", "developer", "viewer"], m.level)])
-    error_message = "level은 admin, developer, viewer 중 하나여야 합니다."
+    condition     = alltrue([for m in values(var.team_members) : contains(["admin", "developer", "viewer", "tester"], m.level)])
+    error_message = "level은 admin, developer, viewer, tester 중 하나여야 합니다."
   }
 }
 
