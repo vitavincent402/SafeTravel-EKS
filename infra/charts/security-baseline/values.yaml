@@ -14,3 +14,8 @@ kubeBench:
 podTester:
   enabled: true                # keeper-red(level=tester)가 위험 파드를 서버 dry-run으로 시험할 수 있게 Role을 만듦
   group: keeper-pod-tester     # EKS access entry의 kubernetes_groups 와 같아야 함
+
+saGuard:
+  enabled: true                # 앱 서비스 어카운트(keeper-*) 도용 방지 정책 (admissionPolicies.enabled 도 true 일 때)
+  actions: ["Warn", "Audit"]   # 검증 기간. 정상 배포가 안 걸리면 ["Deny"] 로 전환
+  deployers: []                # 앱 서비스 어카운트를 쓸 수 있는 사용자 이름 접두사 (Terraform이 채움)

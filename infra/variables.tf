@@ -72,6 +72,12 @@ variable "team_members" {
   }
 }
 
+variable "sa_guard_deny" {
+  description = "앱 서비스 어카운트(keeper-*) 도용 방지 정책을 거부(Deny)로 켤지. false(기본)=Warn+Audit만(검증 기간). 정상 배포가 걸리지 않는 것을 확인한 뒤 true"
+  type        = bool
+  default     = false
+}
+
 variable "hardening" {
   description = "보안 통제를 켤지. true(기본)=전부 적용. false=Before 시연용으로 일부 통제를 끈 채 구축하고 점검한 뒤, true로 다시 apply해 After를 점검. 실제 서비스·평가용 구축은 반드시 true"
   type        = bool

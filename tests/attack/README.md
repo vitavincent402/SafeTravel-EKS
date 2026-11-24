@@ -35,3 +35,10 @@ WAF 차단 기록은 CloudWatch Logs `aws-waf-logs-keeper`에서 본다 (조회 
 ```powershell
 aws logs filter-log-events --log-group-name aws-waf-logs-keeper --region ap-northeast-2 --filter-pattern BLOCK --max-items 20
 ```
+
+## 앱 서비스 어카운트 도용 (sa-hijack-*.yaml)
+- keeper-api 같은 앱 서비스 어카운트를 파드·Deployment에 붙여 그 앱의 IAM 권한(IRSA)을 얻으려는 시도. 파드 생성 주체는 컨트롤러라 Deployment 등에도 정책이 걸려 있다.
+- 정책 keeper-restrict-app-service-accounts 가 Deny 일 때만 거부된다(Warn+Audit 기간에는 경고만). image 의 REPLACE_ECR_REGISTRY 를 실제 ECR 주소로 바꿔서 쓴다.
+- 배포 주체(GitHub Actions 역할, Terraform 실행 계정)와 컨트롤러는 허용된다. NetworkPolicy는 라벨(만드는 쪽이 정함)로 동작하므로 이 경로의 방어선이 아니다.
+- 시험 때는 관리자 계정이 아니라 keeper-red(tester)로 해야 거부 장면이 된다.
+
