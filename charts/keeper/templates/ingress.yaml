@@ -23,6 +23,7 @@ metadata:
 spec:
   ingressClassName: alb
   rules:
+    {{- range $host := (.Values.ingress.hosts | default (list "")) }}
     - http:
         paths:
           - path: /api
@@ -30,13 +31,14 @@ spec:
             backend:
               service:
                 name: keeper-api
-                port: { number: {{ .Values.apps.api.port }} }
+                port: { number: {{ $.Values.apps.api.port }} }
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: keeper-web
-                port: { number: {{ .Values.apps.web.port }} }
-      {{- with .Values.ingress.host }}
-      host: {{ . }}
+                port: { number: {{ $.Values.apps.web.port }} }
+      {{- if $host }}
+      host: {{ $host | quote }}
       {{- end }}
+    {{- end }}

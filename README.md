@@ -5,6 +5,7 @@
 ## 폴더 구조
 
 ```
+persistent/                 Terraform, 한 번만 만드는 것 (도메인 영역·SES·Cognito). 매일 destroy 대상 아님 → persistent/README.md
 infra/                      Terraform (WAS: VPC·EKS·데이터·WAF / SOC: IAM·애드온·bootstrap)
   versions.tf               provider 설정
   variables.tf              입력 값
@@ -19,7 +20,7 @@ infra/                      Terraform (WAS: VPC·EKS·데이터·WAF / SOC: IAM�
   bootstrap.tf              apply 마지막 단계: 파이프라인 실행·대기 / destroy 첫 단계: 앱 삭제
   security.tf               보안 기준선: 입장 정책 4종 + kube-bench 정기 점검 (charts/security-baseline)
   outputs.tf
-charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값)
+charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값). Ingress는 ingress.hosts 목록(도메인 여러 개) 지원
   templates/apps.yaml       web·api·vault 각각 ServiceAccount + Deployment + Service
   templates/ingress.yaml    ALB, WAF·HTTPS 연결
   templates/networkpolicy.yaml  기본 거부 + 허용 경로 5개

@@ -34,6 +34,12 @@ variable "domain_name" {
   default     = ""
 }
 
+variable "extra_domain_names" {
+  description = "대표 주소 외에 함께 쓸 주소 (예: [\"www.travelsafe.click\"]). 인증서·A 레코드·Ingress에 같이 들어간다. 모두 hosted_zone_name 영역 안의 이름이어야 함"
+  type        = list(string)
+  default     = []
+}
+
 variable "hosted_zone_name" {
   description = "Route 53 호스팅 영역 이름 (예: example.com). domain_name을 쓸 때만 필요"
   type        = string
@@ -70,4 +76,23 @@ variable "hardening" {
   description = "보안 통제를 켤지. true(기본)=전부 적용. false=Before 시연용으로 일부 통제를 끈 채 구축하고 점검한 뒤, true로 다시 apply해 After를 점검. 실제 서비스·평가용 구축은 반드시 true"
   type        = bool
   default     = true
+}
+
+# 로그인(Cognito). 풀은 persistent/ 에서 한 번만 만들고, 여기에는 그 출력값을 넣는다.
+variable "cognito_user_pool_id" {
+  description = "persistent/ 가 만든 Cognito 사용자 풀 ID (출력 cognito_user_pool_id). 비워 두면 앱에 전달하지 않음"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_client_id" {
+  description = "persistent/ 가 만든 앱 클라이언트 ID (출력 cognito_client_id)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_login_domain" {
+  description = "관리형 로그인 주소 (출력 cognito_login_domain, https://...amazoncognito.com)"
+  type        = string
+  default     = ""
 }

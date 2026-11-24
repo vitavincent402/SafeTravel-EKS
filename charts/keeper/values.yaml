@@ -34,7 +34,7 @@ serviceAccounts:
     roleArn: ""
 
 ingress:
-  host: ""              # 비어 있으면 ALB 주소로 HTTP 접속
+  hosts: []             # 주소 목록. 비어 있으면 ALB 주소로 HTTP 접속 (예: ["travelsafe.click", "www.travelsafe.click"])
   certificateArn: ""    # 있으면 HTTPS + HTTP→HTTPS 리다이렉트
   wafAclArn: ""
 
@@ -42,3 +42,9 @@ networkPolicy:
   enabled: true
   albSourceCidrs: []    # ALB가 있는 퍼블릭 서브넷 대역
   databaseCidrs: []     # RDS가 있는 데이터 서브넷 대역
+
+# 로그인(Cognito). Terraform이 persistent/ 의 출력값으로 채움
+cognito:
+  userPoolId: ""
+  clientId: ""
+  loginDomain: ""

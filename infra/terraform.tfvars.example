@@ -7,6 +7,13 @@ create_github_oidc_provider = true
 # 도메인이 있으면 HTTPS. 없으면 둘 다 비워 두기
 domain_name      = ""
 hosted_zone_name = ""
+# 주소를 더 쓰려면 (예: www). 인증서·A 레코드·Ingress에 같이 들어감. 같은 호스팅 영역 안의 이름이어야 함
+# extra_domain_names = ["www.travelsafe.click"]
+
+# 로그인(Cognito): persistent/ 를 한 번 apply한 뒤 그 출력값을 넣는다 (persistent/README.md 참고)
+# cognito_user_pool_id = ""
+# cognito_client_id    = ""
+# cognito_login_domain = ""
 
 # true: terraform apply 한 번에 파이프라인까지 실행해서 앱이 떠 있는 상태로 끝남 (강사님 조건)
 # false: 인프라만 만들고 멈춤 (파이프라인 없이 인프라만 확인할 때)

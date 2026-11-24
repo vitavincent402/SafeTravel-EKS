@@ -1,6 +1,8 @@
 # 도메인을 쓰는 경우에만: ACM 인증서(HTTPS) + 앱 주소 레코드
 locals {
   use_domain = var.domain_name != ""
+  # 대표 주소 + 추가 주소(예: www). 인증서·A 레코드·Ingress가 모두 이 목록을 쓴다.
+  all_domains = local.use_domain ? concat([var.domain_name], var.extra_domain_names) : []
 }
 
 data "aws_route53_zone" "this" {
@@ -9,9 +11,10 @@ data "aws_route53_zone" "this" {
 }
 
 resource "aws_acm_certificate" "this" {
-  count             = local.use_domain ? 1 : 0
-  domain_name       = var.domain_name
-  validation_method = "DNS"
+  count                     = local.use_domain ? 1 : 0
+  domain_name               = var.domain_name
+  subject_alternative_names = var.extra_domain_names
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -48,10 +51,10 @@ data "aws_lb" "keeper" {
 }
 
 resource "aws_route53_record" "app" {
-  count   = local.use_domain && var.run_bootstrap_deploy ? 1 : 0
-  zone_id = data.aws_route53_zone.this[0].zone_id
-  name    = var.domain_name
-  type    = "A"
+  for_each = local.use_domain && var.run_bootstrap_deploy ? toset(local.all_domains) : toset([])
+  zone_id  = data.aws_route53_zone.this[0].zone_id
+  name     = each.value
+  type     = "A"
 
   alias {
     name                   = data.aws_lb.keeper[0].dns_name

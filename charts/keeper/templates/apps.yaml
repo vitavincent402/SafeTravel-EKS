@@ -72,6 +72,10 @@ spec:
             {{- if eq $name "api" }}
             - name: VAULT_URL
               value: "http://keeper-vault:{{ $root.Values.apps.vault.port }}"
+            - name: COGNITO_USER_POOL_ID
+              value: {{ $root.Values.cognito.userPoolId | quote }}
+            - name: COGNITO_CLIENT_ID
+              value: {{ $root.Values.cognito.clientId | quote }}
             {{- end }}
             {{- if eq $name "vault" }}
             - name: DOC_BUCKET

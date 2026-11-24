@@ -21,18 +21,23 @@ locals {
       api   = { roleArn = aws_iam_role.api.arn }
       vault = { roleArn = aws_iam_role.vault.arn }
     }
+    cognito = {
+      userPoolId  = var.cognito_user_pool_id
+      clientId    = var.cognito_client_id
+      loginDomain = var.cognito_login_domain
+    }
     ingress = {
-      host           = var.domain_name
+      hosts          = local.all_domains
       certificateArn = local.use_domain ? aws_acm_certificate_validation.this[0].certificate_arn : ""
       wafAclArn      = var.hardening ? aws_wafv2_web_acl.keeper.arn : ""
     }
     networkPolicy = {
+      enabled        = var.hardening
       albSourceCidrs = local.public_subnets
       databaseCidrs  = local.database_subnets
     }
   })
 
-      enabled        = var.hardening
   github_vars = {
     AWS_REGION          = var.region
     AWS_DEPLOY_ROLE_ARN = aws_iam_role.github_actions.arn
