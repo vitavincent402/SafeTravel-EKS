@@ -41,3 +41,8 @@ output "alert_topic_arn" {
   description = "메인 스택 terraform.tfvars의 alert_topic_arn (가용성 감시 알림 주제)"
   value       = aws_sns_topic.alerts.arn
 }
+
+output "tfstate_bucket" {
+  description = "Terraform 상태 파일 보관 버킷 (infra/backend.tf.example 의 bucket 값)"
+  value       = aws_s3_bucket.tfstate.bucket
+}

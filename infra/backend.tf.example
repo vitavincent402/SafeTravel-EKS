@@ -1,0 +1,15 @@
+# infra/의 state를 로컬 파일에서 S3로 옮길 때 쓴다.
+# 사용: 이 파일 이름을 backend.tf 로 바꾸고, bucket 값을 persistent/ 출력(tfstate_bucket)과 맞춘 뒤
+#   terraform init -migrate-state      (옮기겠냐고 물으면 yes)
+# 잠금은 S3 자체 잠금 파일(use_lockfile)을 쓴다. Terraform 1.10 이상이 필요하다 (terraform version 으로 확인).
+# 옮긴 뒤에는 누가 apply해도 같은 state를 보고, 동시에 두 사람이 apply하면 잠금 오류로 막힌다.
+# 이전은 destroy가 끝나 state가 거의 비어 있을 때 하는 것이 가장 안전하다.
+terraform {
+  backend "s3" {
+    bucket       = "keeper-tfstate-<계정 번호 12자리>"
+    key          = "infra/terraform.tfstate"
+    region       = "ap-northeast-2"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

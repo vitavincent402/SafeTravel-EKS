@@ -80,3 +80,66 @@ resource "aws_wafv2_web_acl" "keeper" {
     sampled_requests_enabled   = true
   }
 }
+
+# WAF 로그: 어떤 요청을 차단·허용했는지 CloudWatch Logs에 남긴다 (RED 공격 시험의 탐지 확인용).
+# 로그 그룹 이름은 반드시 aws-waf-logs- 로 시작해야 한다. destroy 때 같이 지워지므로 증적이 필요하면 지우기 전에 내보낸다.
+resource "aws_cloudwatch_log_group" "waf" {
+  name              = "aws-waf-logs-${var.project}"
+  retention_in_days = 7
+}
+
+# WAF(delivery.logs 서비스)가 이 로그 그룹에 쓸 수 있게 하는 계정 단위 리소스 정책
+data "aws_iam_policy_document" "waf_logs" {
+  statement {
+    sid       = "AllowWafLogDelivery"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.waf.arn}:*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+}
+
+resource "aws_cloudwatch_log_resource_policy" "waf" {
+  policy_name     = "${var.project}-waf-logs"
+  policy_document = data.aws_iam_policy_document.waf_logs.json
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "keeper" {
+  resource_arn            = aws_wafv2_web_acl.keeper.arn
+  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
+
+  # 인증 정보·열람 토큰이 로그에 그대로 남지 않게 가린다
+  redacted_fields {
+    single_header {
+      name = "authorization"
+    }
+  }
+  redacted_fields {
+    single_header {
+      name = "cookie"
+    }
+  }
+  redacted_fields {
+    single_header {
+      name = "x-view-token"
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_resource_policy.waf]
+}
