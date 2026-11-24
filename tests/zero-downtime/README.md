@@ -47,6 +47,8 @@ kubectl -n keeper get pods
 kubectl -n keeper get ingress keeper -o jsonpath="{.metadata.annotations}" | Select-String wafv2
 # 사이트가 200인지
 curl.exe -sI https://travelsafe.click | Select-String "HTTP/"
+# 도메인이 EKS(nginx)로 가는지: Server: nginx 여야 함. AmazonS3·cloudfront가 보이면 DNS가 아직 옛 2.5차 사이트로 감 (11/24 발견)
+curl.exe -4 -s -D - -o NUL https://travelsafe.click/ | Select-String "Server|Via"
 ```
 
 ## 11/25 순서 (늦어지면 같은 간격으로 밂)
