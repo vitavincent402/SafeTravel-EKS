@@ -17,3 +17,8 @@ output "github_actions_role_arn" {
 output "app_url" {
   value = local.use_domain ? "https://${var.domain_name}" : "도메인 없음: kubectl get ingress -n keeper 로 ALB 주소 확인"
 }
+
+output "hardening" {
+  description = "보안 통제 상태. false면 Before 시연용으로 일부 통제가 꺼져 있음"
+  value       = var.hardening
+}

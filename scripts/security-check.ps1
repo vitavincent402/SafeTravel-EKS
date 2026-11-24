@@ -6,13 +6,15 @@
 #   $env:AWS_PROFILE = "keeper"
 #   powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1
 # 결과: 화면 표 + evidence\security-check-<시각>.md / .csv  (evidence 폴더는 git에 올라가지 않음)
+# Before/After 시연: -Label before / -Label after 를 붙이면 파일 이름에 구분이 들어갑니다 (README "Before / After 시연")
 #
 # PASS = 기준 충족, FAIL = 고쳐야 함, WARN = 알고 둔 예외(사유를 상세에 적음)
 
 param(
   [string]$Cluster   = "keeper-eks",
   [string]$Region    = "ap-northeast-2",
-  [string]$Namespace = "keeper"
+  [string]$Namespace = "keeper",
+  [string]$Label     = ""      # 결과 파일 이름에 붙일 구분 (예: before, after)
 )
 
 $ErrorActionPreference = "Continue"
@@ -200,6 +202,23 @@ $ecrTok = @($ecr -split " " | Where-Object { $_ })
 $ecrOk = ($ecrTok.Count -eq 6) -and (@($ecrTok | Where-Object { $_ -eq "IMMUTABLE" }).Count -eq 3) -and (@($ecrTok | Where-Object { $_ -eq "True" }).Count -eq 3)
 Add-Result "S19" "공급망" "ECR 태그 덮어쓰기 금지 + 푸시 시 스캔" $(if ($ecrOk) { "PASS" } else { "FAIL" }) $ecr
 
+# S20 팀원 권한 등급: 본인(인프라 담당) 외에는 클러스터 전체 관리자 권한이 없어야 함 (최소 권한)
+$callerArn = Get-AwsText @("sts", "get-caller-identity", "--query", "Arn")
+$entries = @((Get-AwsText @("eks", "list-access-entries", "--cluster-name", $Cluster, "--query", "accessEntries[]")) -split " " | Where-Object { $_ })
+$admins = @()
+foreach ($e in $entries) {
+  if ($e -eq $callerArn) { continue }
+  $pol = Get-AwsText @("eks", "list-associated-access-policies", "--cluster-name", $Cluster, "--principal-arn", $e, "--query", "associatedAccessPolicies[].policyArn")
+  if ($pol -match "AmazonEKSClusterAdminPolicy") { $admins += ($e -replace "^.*/", "") }
+}
+if ($entries.Count -eq 0) {
+  Add-Result "S20" "RBAC" "팀원 권한 등급 (클러스터 전체 관리자는 인프라 담당만)" "FAIL" "access entry 조회 실패"
+} else {
+  $s20Ok = ($admins.Count -eq 0)
+  $s20Detail = if ($s20Ok) { "access entry {0}개 중 클러스터 전체 관리자 없음 (본인 제외)" -f $entries.Count } else { "클러스터 전체 관리자: " + ($admins -join ", ") }
+  Add-Result "S20" "RBAC" "팀원 권한 등급 (클러스터 전체 관리자는 인프라 담당만)" $(if ($s20Ok) { "PASS" } else { "FAIL" }) $s20Detail
+}
+
 # ---------------------------------------------------------------- 요약과 저장
 $Timer.Stop()
 $pass = @($Results | Where-Object { $_.Result -eq "PASS" }).Count
@@ -214,8 +233,9 @@ Write-Host ("결과: PASS {0} / WARN {1} / FAIL {2}  (전체 {3}개, {4}초)" -f
 $EvidenceDir = Join-Path $RepoRoot "evidence"
 New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$csv = Join-Path $EvidenceDir "security-check-$stamp.csv"
-$md  = Join-Path $EvidenceDir "security-check-$stamp.md"
+$tag = if ($Label) { "$Label-" } else { "" }
+$csv = Join-Path $EvidenceDir "security-check-$tag$stamp.csv"
+$md  = Join-Path $EvidenceDir "security-check-$tag$stamp.md"
 $Results | Export-Csv -Path $csv -NoTypeInformation -Encoding UTF8
 
 $lines = @(
@@ -223,6 +243,7 @@ $lines = @(
   "",
   ("- 시각: {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")),
   ("- 클러스터: {0} / 네임스페이스: {1}" -f $Cluster, $Namespace),
+  ("- 구분: {0}" -f $(if ($Label) { $Label } else { "(없음)" })),
   ("- 결과: PASS {0} / WARN {1} / FAIL {2} (전체 {3}개, 소요 {4}초)" -f $pass, $warn, $fail, $total, $secs),
   "",
   "| ID | 영역 | 항목 | 결과 | 상세 |",

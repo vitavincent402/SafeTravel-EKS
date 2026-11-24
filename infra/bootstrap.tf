@@ -24,7 +24,7 @@ locals {
     ingress = {
       host           = var.domain_name
       certificateArn = local.use_domain ? aws_acm_certificate_validation.this[0].certificate_arn : ""
-      wafAclArn      = aws_wafv2_web_acl.keeper.arn
+      wafAclArn      = var.hardening ? aws_wafv2_web_acl.keeper.arn : ""
     }
     networkPolicy = {
       albSourceCidrs = local.public_subnets
@@ -32,6 +32,7 @@ locals {
     }
   })
 
+      enabled        = var.hardening
   github_vars = {
     AWS_REGION          = var.region
     AWS_DEPLOY_ROLE_ARN = aws_iam_role.github_actions.arn

@@ -15,6 +15,8 @@ resource "helm_release" "security_baseline" {
   values = [yamlencode({
     protectedNamespaces   = [kubernetes_namespace.keeper.metadata[0].name]
     trustedRegistryPrefix = "${local.ecr_registry}/keeper/"
+    admissionPolicies     = { enabled = var.hardening }
+    kubeBench             = { enabled = var.hardening }
   })]
 
   depends_on = [module.eks, kubernetes_namespace.keeper]

@@ -65,3 +65,9 @@ variable "team_members" {
     error_message = "level은 admin, developer, viewer 중 하나여야 합니다."
   }
 }
+
+variable "hardening" {
+  description = "보안 통제를 켤지. true(기본)=전부 적용. false=Before 시연용으로 일부 통제를 끈 채 구축하고 점검한 뒤, true로 다시 apply해 After를 점검. 실제 서비스·평가용 구축은 반드시 true"
+  type        = bool
+  default     = true
+}

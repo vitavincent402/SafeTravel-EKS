@@ -3,6 +3,7 @@
   CEL 식은 멘토 키트 _shared/k8s/kyverno-baseline.yaml, s3 trusted-registry.yaml과 같습니다.
   validationActions를 [Audit]로 바꾸면 거부하지 않고 감사 로그에만 남깁니다.
 */ -}}
+{{- if .Values.admissionPolicies.enabled }}
 {{- if not .Values.protectedNamespaces }}{{ fail "protectedNamespaces가 비어 있습니다" }}{{ end -}}
 {{- $nsList := .Values.protectedNamespaces -}}
 {{- $reg := required "trustedRegistryPrefix가 비어 있습니다" .Values.trustedRegistryPrefix -}}
@@ -64,4 +65,5 @@ spec:
             {{- range $nsList }}
             - {{ . | quote }}
             {{- end }}
+{{- end }}
 {{- end }}

@@ -5,6 +5,7 @@
   지금 바로 점검: kubectl create job kb-now --from=cronjob/kube-bench-daily -n security-audit
   결과 보기:      kubectl logs job/kb-now -n security-audit
 */ -}}
+{{- if .Values.kubeBench.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -82,3 +83,4 @@ spec:
             - { name: var-lib-kubelet, hostPath: { path: /var/lib/kubelet } }
             - { name: etc-systemd, hostPath: { path: /etc/systemd } }
             - { name: etc-kubernetes, hostPath: { path: /etc/kubernetes } }
+{{- end }}

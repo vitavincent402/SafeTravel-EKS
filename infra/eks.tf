@@ -1,3 +1,5 @@
+# hardening 변수: false면 Before 시연용으로 감사 로그, IMDS 제한, 팀원 권한 등급, PSA, default SA 토큰 설정을 끈 채로 만듭니다.
+# 기본값은 true(전부 적용)입니다. 순서와 점검 방법은 README의 "Before / After 시연"을 보세요.
 # 팀원 권한 (var.team_members). IAM 사용자는 이 코드 밖에서 만들고(매일 destroy해도 유지),
 # 여기서는 클러스터 안 권한(access entry)만 부여합니다.
 locals {
@@ -31,8 +33,9 @@ locals {
 
   team_access_entries = {
     for name, m in var.team_members : name => {
+      # hardening=false(Before 시연)에서는 모두 관리자, true에서는 각자의 level(최소 권한)
       principal_arn       = m.arn
-      policy_associations = local.access_levels[m.level]
+      policy_associations = local.access_levels[var.hardening ? m.level : "admin"]
     }
   }
 }
@@ -56,7 +59,7 @@ module "eks" {
   # 감사 로그: 누가 클러스터 API에 무엇을 요청했는지 CloudWatch Logs에 남깁니다 (CIS EKS 2.1.1).
   # 모듈 기본값과 같지만 코드에서 보이도록 명시하고, 보존 기간만 90일 → 7일로 줄였습니다(비용).
   # 로그 그룹은 destroy 때 같이 지워지므로, 증적이 필요하면 destroy 전에 내보내세요.
-  cluster_enabled_log_types              = ["api", "audit", "authenticator"]
+  cluster_enabled_log_types              = var.hardening ? ["api", "audit", "authenticator"] : []
   cloudwatch_log_group_retention_in_days = 7
 
   # terraform apply를 실행한 사람(역할)에게 클러스터 관리자 권한
@@ -93,8 +96,8 @@ module "eks" {
       # (모듈 기본값은 hop limit 2 → 파드에서도 노드 자격 증명이 보임)
       metadata_options = {
         http_endpoint               = "enabled"
-        http_tokens                 = "required"
-        http_put_response_hop_limit = 1
+        http_tokens                 = var.hardening ? "required" : "optional"
+        http_put_response_hop_limit = var.hardening ? 1 : 2
       }
 
       # 노드 디스크 암호화
@@ -136,9 +139,9 @@ module "eks" {
 resource "kubernetes_namespace" "keeper" {
   metadata {
     name = "keeper"
-    labels = {
+    labels = var.hardening ? {
       "pod-security.kubernetes.io/enforce" = "restricted"
-    }
+    } : {}
   }
 
   depends_on = [module.eks]
@@ -150,5 +153,5 @@ resource "kubernetes_default_service_account_v1" "keeper" {
   metadata {
     namespace = kubernetes_namespace.keeper.metadata[0].name
   }
-  automount_service_account_token = false
+  automount_service_account_token = !var.hardening
 }

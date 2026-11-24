@@ -26,7 +26,7 @@ charts/keeper/              Helm 차트 (SOC: 골격 / DB: 앱 값)
 apps/web, apps/api, apps/vault  임시 앱 (각 담당이 실제 코드로 교체)
 .github/workflows/deploy.yml    빌드 → Trivy → ECR → Helm 패키지 → helm upgrade
 tests/attack/               위험 파드 예시 4종 (서버 dry-run 전용, 모두 거부되어야 정상)
-scripts/security-check.ps1  보안 자체 점검 19항목 → evidence/ 에 결과 저장
+scripts/security-check.ps1  보안 자체 점검 20항목 → evidence/ 에 결과 저장
 ```
 
 ## 처음 한 번 준비
@@ -102,7 +102,47 @@ terraform destroy      # 앱 삭제 → ALB 정리 → 인프라 삭제 순서�
 
 ```powershell
 $env:AWS_PROFILE = "keeper"
-powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1      # 19항목 점검 → evidence\
+powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1      # 20항목 점검 → evidence\
 kubectl create job kb-now --from=cronjob/kube-bench-daily -n security-audit   # CIS 점검 즉시 실행
 kubectl logs job/kb-now -n security-audit
 ```
+
+## Before / After 시연 (보안 통제 켜기·끄기)
+
+`hardening` 변수로 일부 통제를 끈 상태와 켠 상태를 같은 점검으로 비교합니다. **기본값은 `true`(전부 적용)**이고, `false`는 Before 시연 때만 씁니다. 평가·실제 서비스용 구축은 `false`로 만들지 마세요.
+
+| 통제 | hardening=false (Before) | hardening=true (After) | 점검 |
+|---|---|---|---|
+| 파드 보안(PSA restricted) | 끔 | 강제 | S01 |
+| default NetworkPolicy(기본 거부) | 없음 | 있음 | S03 |
+| 입장 정책 4종 | 없음 | 있음 | S04 |
+| default SA 토큰 자동 마운트 | 켬 | 끔 | S05 |
+| 위험 파드 4종(dry-run) | 생성 허용 | 거부 | S07~S10 |
+| kube-bench 정기 점검 | 없음 | 있음 | S11 |
+| WAF 연결 | 없음 | 연결 | S13 |
+| EKS 감사 로그 | 꺼짐 | 켜짐 | S14 |
+| 노드 IMDS | v1 허용, hop 2 | v2 필수, hop 1 | S16 |
+| 팀원 권한 등급 | 모두 관리자 | 각자 level(최소 권한) | S20 |
+
+스위치에 넣지 않은 통제(RDS 암호화, S3 공개 차단, ECR 설정 등 S17~S19, RBAC S02·S06, 공개 엔드포인트 S15)는 Before에서도 그대로입니다. RDS 암호화는 켜고 끄려면 DB를 새로 만들어야 하고, 나머지는 끄는 것 자체가 위험하기 때문입니다.
+
+```powershell
+cd infra
+$env:AWS_PROFILE = "keeper"
+
+# 1) Before: 통제를 끈 채로 구축 (앱까지 배포됨)
+terraform apply -var hardening=false
+cd ..
+powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1 -Label before
+
+# 2) After: 같은 클러스터에서 통제를 켬 (노드가 교체되어 10~20분 걸림, 앱은 다시 배포됨)
+cd infra
+terraform apply
+cd ..
+powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1 -Label after
+
+# 3) 두 결과를 나란히 비교 (evidence\before-after-<시각>.md 저장)
+powershell -ExecutionPolicy Bypass -File scripts\compare-checks.ps1 -Before evidence\security-check-before-<시각>.csv -After evidence\security-check-after-<시각>.csv
+```
+
+`hardening=false`로 구축한 클러스터는 일부 통제가 꺼져 있으니 점검이 끝나면 바로 `terraform apply`(true)로 되돌리거나 삭제하세요.

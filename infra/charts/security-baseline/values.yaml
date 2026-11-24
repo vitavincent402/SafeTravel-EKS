@@ -2,7 +2,11 @@
 protectedNamespaces: []        # 정책을 적용할 네임스페이스
 trustedRegistryPrefix: ""      # 예: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/keeper/
 
+admissionPolicies:
+  enabled: true                # false면 입장 정책 4종을 만들지 않음 (Before 시연용)
+
 kubeBench:
+  enabled: true                # false면 kube-bench 정기 점검을 만들지 않음 (Before 시연용)
   image: docker.io/aquasec/kube-bench:v0.16.0
   benchmark: eks-1.8.0
   schedule: "0 3 * * *"        # 매일 03:00 UTC = 12:00 KST (클러스터가 켜져 있는 낮 시간)
