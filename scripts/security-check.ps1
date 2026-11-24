@@ -49,8 +49,10 @@ function Test-DryRunDenied([string]$File) {
   $msg = (& kubectl apply -n $Namespace --dry-run=server -f $File 2>&1 | Out-String).Trim()
   return @{ Denied = ($LASTEXITCODE -ne 0); Message = $msg }
 }
-function Get-HttpCode([string]$Url) {
-  $code = & $CurlExe -s -o $NullFile -w "%{http_code}" --max-time 10 $Url 2>$null
+function Get-HttpCode([string]$Url, [switch]$Insecure) {
+  $curlArgs = @("-s", "-o", $NullFile, "-w", "%{http_code}", "--max-time", "10")
+  if ($Insecure) { $curlArgs += "-k" }   # ALB 주소는 인증서의 도메인과 달라서 인증서 이름 검사만 건너뜀 (점검용)
+  $code = & $CurlExe @curlArgs $Url 2>$null
   if (-not $code) { return "ERR" }
   return "$code"
 }
@@ -155,7 +157,13 @@ if (-not $albHost) {
   Add-Result "S13" "WAF" "XSS 공격 요청 차단 (403)" "FAIL" "ALB 주소 없음"
 } else {
   $ok = Get-HttpCode "http://$albHost/healthz"
-  Add-Result "S12" "가용성" "서비스 정상 응답 (ALB → web /healthz 200)" $(if ($ok -eq "200") { "PASS" } else { "FAIL" }) "HTTP $ok"
+  $note = "HTTP $ok"
+  if ($ok -eq "301" -or $ok -eq "308") {
+    # 도메인·인증서를 쓰면 ALB가 80 → 443으로 넘기므로, 넘어간 HTTPS 쪽 응답을 확인
+    $ok = Get-HttpCode "https://$albHost/healthz" -Insecure
+    $note = "HTTP 80은 HTTPS로 이동(301), HTTPS $ok"
+  }
+  Add-Result "S12" "가용성" "서비스 정상 응답 (ALB → web /healthz 200)" $(if ($ok -eq "200") { "PASS" } else { "FAIL" }) $note
   $xss = Get-HttpCode "http://$albHost/?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
   Add-Result "S13" "WAF" "XSS 공격 요청 차단 (403)" $(if ($xss -eq "403") { "PASS" } else { "FAIL" }) "HTTP $xss"
 }
