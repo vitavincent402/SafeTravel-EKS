@@ -221,6 +221,10 @@ class ApiHandler(JsonHandler):
             raise
         title = (fields.get("title") or (None, b""))[1].decode("utf-8", "replace").strip()
         filename, content = fields.get("file") or (None, b"")
+        # 수정 확인용: 성공한 업로드도 연결 내 몇 번째 요청이었는지와 크기를 남긴다(내용·제목·사용자 정보는 남기지 않음).
+        log("upload_parsed", content_length=self.headers.get("Content-Length"),
+            body_bytes=len(self.raw_body()), file_bytes=len(content),
+            conn_request_no=getattr(self, "conn_request_no", None))
         if not content:
             raise HttpError(400, "file required")
         status, data = self.vault_json("POST", "/documents", user, body={

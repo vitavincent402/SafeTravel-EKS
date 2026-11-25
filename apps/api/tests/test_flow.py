@@ -362,3 +362,17 @@ def test_암호화_문맥이_다르거나_내용이_바뀌면_복호화_실패(e
     with pytest.raises(crypto.DecryptError):
         crypto.decrypt_document(kms, "k", blob[:-1] + bytes([blob[-1] ^ 1]), key,
                                 {"document_id": "A", "owner_id": "O"})
+
+
+def test_업로드_성공도_연결_순번과_크기만_로그에_남긴다(env, capsys):
+    api = env["api"]
+    capsys.readouterr()
+    code, doc = upload(api, OWNER, "비밀제목", "secret-name.png", PNG)
+    assert code == 201, doc
+    out = capsys.readouterr().out
+    lines = [json.loads(x) for x in out.splitlines() if x.startswith("{")]
+    ev = [x for x in lines if x.get("event") == "upload_parsed"]
+    assert len(ev) == 1
+    assert ev[0]["file_bytes"] == len(PNG) and ev[0]["body_bytes"] > len(PNG)
+    assert ev[0]["conn_request_no"] >= 1
+    assert "비밀제목" not in out and "secret-name" not in out  # 제목·파일 이름은 남기지 않는다
