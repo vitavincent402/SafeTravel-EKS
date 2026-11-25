@@ -159,6 +159,10 @@ resource "aws_wafv2_web_acl_logging_configuration" "cognito" {
       name = "cookie"
     }
   }
+  # 로그인 요청의 쿼리 문자열(client_id, redirect_uri, state, code_challenge 등)도 가린다 (SOC 요청, 11/25)
+  redacted_fields {
+    query_string {}
+  }
 
   depends_on = [aws_cloudwatch_log_resource_policy.waf_cognito]
 }
