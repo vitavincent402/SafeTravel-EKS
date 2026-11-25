@@ -25,11 +25,75 @@ resource "aws_wafv2_web_acl" "keeper" {
             count {}
           }
         }
+        # 서류 업로드(POST /api/docs)는 본문이 base64로 인코딩된 큰 파일이라 XSS 본문 검사에 오탐이 난다(11/25 11:20, 3.4MB 업로드 4건 403).
+        # 이 규칙은 '기록만'으로 바꾸고, 업로드 경로만 뺀 같은 검사를 아래 xss-body-except-docs 규칙으로 따로 건다.
+        rule_action_override {
+          name = "CrossSiteScripting_BODY"
+          action_to_use {
+            count {}
+          }
+        }
       }
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "aws-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # 요청 본문의 XSS 검사: 서류 업로드 경로(/api/docs)만 빼고 모든 경로에 적용 (위 aws-common의 본문 XSS 규칙을 대신함)
+  rule {
+    name     = "xss-body-except-docs"
+    priority = 4
+    action {
+      block {}
+    }
+    statement {
+      and_statement {
+        statement {
+          xss_match_statement {
+            field_to_match {
+              body {
+                oversize_handling = "CONTINUE"
+              }
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 2
+              type     = "HTML_ENTITY_DECODE"
+            }
+          }
+        }
+        statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/api/docs"
+                positional_constraint = "STARTS_WITH"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "xss-body-except-docs"
       sampled_requests_enabled   = true
     }
   }
