@@ -76,7 +76,9 @@ export default function () {
   const res = http.get(BASE + path, { timeout: "10s", tags: { path } });
   // DNS가 아직 옛 2.5차 CloudFront를 가리키면 결과가 섞인다 (11/24 발견) → 무효로 따로 세고 판정에서 뺀다
   const server = String(res.headers["Server"] || "");
-  if (res.status !== 0 && (res.headers["Via"] || res.headers["X-Amz-Cf-Id"] || (server && !/^nginx/i.test(server)))) {
+  // 우리 쪽 응답의 Server: web=nginx, api=keeper, ALB·WAF가 직접 만든 응답(502·503·504·403)=awselb/2.0 (SOC 지적)
+  // 그 밖의 Server 이거나 CloudFront 흔적(Via, X-Amz-Cf-Id)이 있으면 EKS가 아닌 곳의 응답이다
+  if (res.status !== 0 && (res.headers["Via"] || res.headers["X-Amz-Cf-Id"] || (server && !/^(nginx|awselb|keeper)/i.test(server)))) {
     invalid.add(1, { path });
     console.warn(`INVALID ${new Date().toISOString()} ${path} status=${res.status} ip=${res.remote_ip || "-"} server=${server || "-"} (EKS가 아닌 곳이 답함, 재측정 필요)`);
     return;
