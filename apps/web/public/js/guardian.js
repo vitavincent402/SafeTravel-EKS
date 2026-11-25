@@ -1,11 +1,13 @@
 /* 보호자 화면: 지키는 사람 카드(상태·진행 단계), 열람 요청(사용자 응답 대기), 비상일 때 열람 토큰으로 서류 보기.
  * - 열람 토큰은 서버가 준 만료 시각(expires_at)까지만 쓰고, 끝나면 화면과 열린 서류 창을 닫는다.
  * - 토큰은 메모리에만 둔다(새로 고침하면 다시 받아야 함). 요청마다 X-View-Token 머리말로 보낸다.
- * - 5초마다 목록을 확인하고, 상태가 바뀐 카드만 다시 그린다(진행 중인 타이머가 끊기지 않게). */
+ * - 10초마다 목록을 확인하고, 상태가 바뀐 카드만 다시 그린다(진행 중인 타이머가 끊기지 않게). */
 (function () {
     "use strict";
     var api = window.keeperApi, kp = window.kp, $ = kp.$, el = kp.el;
-    var POLL_MS = 5000;
+    /* 10초마다 묻는다. 5초였을 때 창 2개(같은 IP)만으로 WAF 요청 제한(IP당 5분 300건)을 넘었다 (11/25 10:08~10:10, 103건 차단).
+     * 탭이 안 보이는 동안은 묻지 않고, 다시 보이면 바로 한 번 묻는다. 요청 대기는 60초라 10초 간격이면 충분히 거부할 수 있다. */
+    var POLL_MS = 10000;
     var cards = {};   /* user_id → { sig, box, stops: [], view: { token, expires_at } | null, urls: [] } */
 
     function stopAll(c) { c.stops.forEach(function (f) { f(); }); c.stops = []; }
@@ -184,6 +186,7 @@
     kp.requireRole("guardian").then(function (me) {
         kp.topbar(me.name, "보호자");
         poll();
-        setInterval(poll, POLL_MS);
+        setInterval(function () { if (!document.hidden) { poll(); } }, POLL_MS);
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); } });
     }, function () { /* 다른 화면으로 이동함 */ });
 })();
