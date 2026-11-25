@@ -48,7 +48,7 @@ const checks = [
       if (h("x-content-type-options").toLowerCase() !== "nosniff") missing.push("X-Content-Type-Options");
       if (h("referrer-policy") !== "no-referrer") missing.push("Referrer-Policy");
       if (/nginx\/\d/i.test(h("server"))) missing.push("Server 헤더에 버전 노출");
-      if (BASE.startsWith("https://") && !h("strict-transport-security")) console.log("참고: HSTS 헤더 없음 (실패로 치지는 않음)");
+      if (BASE.startsWith("https://") && !/max-age=\d+/.test(h("strict-transport-security"))) missing.push("HSTS");
       if (missing.length) throw new Error("빠짐: " + missing.join(", "));
     },
   },
