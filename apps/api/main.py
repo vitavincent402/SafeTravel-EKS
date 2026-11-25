@@ -209,7 +209,16 @@ class ApiHandler(JsonHandler):
 
     def docs_upload(self):
         user = self.current_user()
-        fields = parse_multipart(self.headers.get("Content-Type") or "", self.raw_body())
+        try:
+            fields = parse_multipart(self.headers.get("Content-Type") or "", self.raw_body())
+        except HttpError as e:
+            # 11-25 업로드 첫 시도 400 원인 추적용. 본문 내용은 남기지 않고 모양만 기록한다.
+            body = self.raw_body()
+            log("upload_parse_failed", error=e.error, content_length=self.headers.get("Content-Length"),
+                transfer_encoding=self.headers.get("Transfer-Encoding"), body_bytes=len(body),
+                starts_with_boundary=body.lstrip(b"\r\n").startswith(b"--"),
+                conn_request_no=getattr(self, "conn_request_no", None))
+            raise
         title = (fields.get("title") or (None, b""))[1].decode("utf-8", "replace").strip()
         filename, content = fields.get("file") or (None, b"")
         if not content:

@@ -19,6 +19,7 @@ class Handler(JsonHandler):
     ROUTES = routes(
         ("POST", r"/no-read", "no_read"),      # 본문을 읽지 않는 처리 (sos, sos/cancel, deny와 같음)
         ("POST", r"/deny", "deny"),            # 본문을 읽기 전에 오류로 끝나는 처리 (로그인 실패 401 등)
+        ("POST", r"/echo", "echo"),            # 본문을 읽어 그대로 돌려줌 (업로드·보호자 등록과 같음)
         ("GET", r"/ping", "ping"),
     )
     MAX_BODY = 1024
@@ -29,6 +30,9 @@ class Handler(JsonHandler):
     def deny(self):
         from web import HttpError
         raise HttpError(401, "unauthorized")
+
+    def echo(self):
+        return {"got": self.raw_body().decode()}
 
     def ping(self):
         return {"pong": True}
@@ -88,3 +92,18 @@ def test_너무_큰_본문도_서버가_멈추지_않음(server):
     fresh.request("GET", "/ping")
     assert fresh.getresponse().status == 200
     fresh.close()
+
+
+def test_같은_연결의_두번째_요청은_자기_본문을_읽는다(server):
+    # 수정 전에는 첫 요청의 본문이 남아 두 번째 요청이 그것을 읽고(업로드면 400 invalid multipart body),
+    # 자기 본문은 연결에 남아 다음 요청이 501로 깨졌다 (11-25 업로드 첫 시도 실패 사례).
+    conn = http.client.HTTPConnection("127.0.0.1", server, timeout=5)
+    for body in (b"AAAA", b"BBBBBBBB"):
+        conn.request("POST", "/echo", body=body, headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        assert resp.status == 200
+        assert resp.read() == b'{"got": "%s"}' % body
+    conn.request("GET", "/ping")
+    resp = conn.getresponse()
+    assert resp.status == 200, f"뒤이은 GET이 {resp.status}로 실패 (501이면 남은 본문 때문)"
+    conn.close()
