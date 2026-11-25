@@ -100,6 +100,12 @@ variable "rate_limit_action" {
   }
 }
 
+variable "enable_alb_access_logs" {
+  description = "true면 ALB 접속 로그를 persistent/의 S3 버킷(keeper-alb-logs-<계정>)에 남긴다. 버킷이 먼저 있어야 하므로 persistent/를 apply한 뒤 true로 켠다"
+  type        = bool
+  default     = false
+}
+
 variable "hardening" {
   description = "보안 통제를 켤지. true(기본)=전부 적용. false=Before 시연용으로 일부 통제를 끈 채 구축하고 점검한 뒤, true로 다시 apply해 After를 점검. 실제 서비스·평가용 구축은 반드시 true"
   type        = bool
