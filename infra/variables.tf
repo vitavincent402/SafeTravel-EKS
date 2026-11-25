@@ -78,6 +78,17 @@ variable "sa_guard_deny" {
   default     = false
 }
 
+variable "rate_limit" {
+  description = "WAF rate-limit 규칙의 한도. 한 IP가 5분 동안 보낼 수 있는 요청 수(WAF 최소 10). 화면 폴링과 공용망(한 IP에 여러 명)을 고려해 기본 1000"
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.rate_limit >= 100 && var.rate_limit <= 20000000
+    error_message = "rate_limit은 100 이상이어야 합니다."
+  }
+}
+
 variable "rate_limit_action" {
   description = "WAF rate-limit 규칙의 동작. block(기본) 또는 count(차단하지 않고 집계만). count는 부하 측정 시간에만 쓰고 끝나면 block으로 되돌린다"
   type        = string
