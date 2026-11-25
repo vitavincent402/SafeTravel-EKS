@@ -17,6 +17,7 @@ resource "helm_release" "security_baseline" {
     trustedRegistryPrefix = "${local.ecr_registry}/keeper/"
     admissionPolicies     = { enabled = var.hardening }
     kubeBench             = { enabled = var.hardening }
+    networkIsolation      = { enabled = var.hardening }
     podTester             = { enabled = true, group = local.pod_tester_group }
     # 앱 서비스 어카운트(keeper-*) 도용 방지. 처음에는 Warn+Audit(정상 배포가 안 걸리는지 확인), 검증 후 sa_guard_deny=true 로 거부 전환
     saGuard = {
