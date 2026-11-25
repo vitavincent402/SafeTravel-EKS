@@ -1,0 +1,40 @@
+{{- /*
+  keeper 밖 네임스페이스(default, security-audit)의 기본 거부.
+  keeper 네임스페이스에만 NetworkPolicy가 있으면 다른 네임스페이스의 파드가 노드 보안 그룹을 통해
+  RDS(5432)에 닿는다. 이 두 네임스페이스에는 앱이 없으므로 들어오고 나가는 트래픽을 모두 막고 DNS만 허용한다.
+  (kube-bench 점검 잡은 노드 파일을 읽을 뿐이라 네트워크가 필요 없다.)
+  주의: VPC CNI는 파드가 뜬 직후 몇 초 동안은 정책이 아직 붙지 않을 수 있다. 시험할 때는 파드가 뜬 뒤 10초 이상 기다린다.
+*/ -}}
+{{- if .Values.networkIsolation.enabled }}
+{{- range .Values.networkIsolation.namespaces }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ . }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: {{ . }}
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+{{- end }}
+{{- end }}
