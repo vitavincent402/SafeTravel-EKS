@@ -99,6 +99,31 @@ class JsonHandler(BaseHTTPRequestHandler):
         return body
 
     def _dispatch(self, method):
+        try:
+            self._route(method)
+        finally:
+            self._drain_body()
+
+    def _drain_body(self):
+        """처리 중에 읽지 않은 요청 본문을 비운다.
+        HTTP/1.1은 연결을 이어 쓰고 ALB도 여러 사용자의 요청에 같은 연결을 쓴다. 본문을 남기면
+        같은 연결로 온 다음 요청이 '{}GET /...'처럼 읽혀 http.server가 501을 보낸다(11-25 10:16 사례)."""
+        if hasattr(self, "_body"):
+            return
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            self.close_connection = True  # 길이를 모르는 본문은 읽지 않고 연결을 끊는다
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self.close_connection = True
+            return
+        if length > self.MAX_BODY:
+            self.close_connection = True  # 너무 큰 본문은 읽지 않고 연결을 끊는다
+        elif length > 0:
+            self.rfile.read(length)
+
+    def _route(self, method):
         path, _, query = self.path.partition("?")
         self.path_only = path
         self.query = {k: v[0] for k, v in parse_qs(query).items()}
