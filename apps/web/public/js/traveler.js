@@ -52,8 +52,11 @@
     }
 
     /* ---------- 보호자 요청 알림 ---------- */
+    /* 이미 거부한 요청: 거부 직전에 보낸 폴링 응답이 늦게 와도 알림을 다시 띄우지 않는다 (11/25 실제 시험에서 발견) */
+    var deniedIds = {};
+
     function showRequest(req) {
-        if (pendingId === req.request_id) { return; }
+        if (pendingId === req.request_id || deniedIds[req.request_id]) { return; }
         pendingId = req.request_id;
         $("reqIco").textContent = "🔔";
         $("reqText").textContent = req.guardian_name + " 님(보호자)이 서류 열람을 요청했어요";
@@ -85,7 +88,10 @@
 
     $("denyBtn").addEventListener("click", function () {
         if (!pendingId) { return; }
-        api.call("POST", "/api/requests/" + encodeURIComponent(pendingId) + "/deny").then(function (r) {
+        var id = pendingId;
+        deniedIds[id] = true;
+        api.call("POST", "/api/requests/" + encodeURIComponent(id) + "/deny").then(function (r) {
+            if (!r.ok) { delete deniedIds[id]; }
             if (r.ok) { closeRequest("✋", "요청을 거부했어요. 보호자에게 거부했다고 알려져요.", "done"); }
             else { kp.toast(kp.errText(r)); checkRequest(); }
         });
