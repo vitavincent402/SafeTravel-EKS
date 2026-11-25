@@ -1,0 +1,18 @@
+{{- /* 앱마다 PodDisruptionBudget: 노드 교체·점검(drain) 때도 최소 개수는 남긴다 (무중단 배포, WEB 제안) */ -}}
+{{- if .Values.rollout.enabled }}
+{{- $root := . -}}
+{{- range $name, $app := .Values.apps }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keeper-{{ $name }}
+  labels:
+    {{- include "keeper.labels" $root | nindent 4 }}
+spec:
+  minAvailable: {{ $root.Values.rollout.pdbMinAvailable }}
+  selector:
+    matchLabels:
+      app: keeper-{{ $name }}
+{{- end }}
+{{- end }}
