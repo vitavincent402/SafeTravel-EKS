@@ -1,10 +1,12 @@
 /* 여행자 화면: 상태(평소/비상), SOS·비상 해제, 보호자 요청 알림(시간 안에 거부), 내 보호자(등록·삭제),
  * 서류함(미리보기·크게 보기·올리기·삭제).
- * 5초마다 /api/requests/pending 과 /api/me 를 확인한다(폴링). */
+ * 10초마다 /api/requests/pending 과 /api/me 를 확인한다(폴링). */
 (function () {
     "use strict";
     var api = window.keeperApi, kp = window.kp, $ = kp.$, el = kp.el;
-    var POLL_MS = 5000;
+    /* 10초마다 묻는다. 5초였을 때 창 2개(같은 IP)만으로 WAF 요청 제한(IP당 5분 300건)을 넘었다 (11/25 10:08~10:10, 103건 차단).
+     * 탭이 안 보이는 동안은 묻지 않고, 다시 보이면 바로 한 번 묻는다. 요청 대기는 60초라 10초 간격이면 충분히 거부할 수 있다. */
+    var POLL_MS = 10000;
     var pendingId = null, stopReq = null, thumbs = [];
 
     /* ---------- 상태와 SOS ---------- */
@@ -277,6 +279,8 @@
         loadDocs();
         loadGuardians();
         checkRequest();
-        setInterval(function () { checkRequest(); if (!pendingId) { refreshMe(); } }, POLL_MS);
+        var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } };
+        setInterval(function () { if (!document.hidden) { tick(); } }, POLL_MS);
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) { tick(); } });
     }, function () { /* 다른 화면으로 이동함 */ });
 })();
