@@ -54,7 +54,8 @@ resource "aws_wafv2_web_acl" "keeper" {
     }
   }
 
-  # 대입 공격: IP당 5분에 300회 넘으면 차단 (시연 때 값 조정)
+  # 대입 공격: IP당 5분에 var.rate_limit(기본 1000)회 넘으면 차단.
+  # 화면이 5초마다 폴링하고(요청 2~3개) 공용망은 여러 명이 한 IP라서, 300으로는 정상 사용도 걸렸다(11/25 보호자 시험)
   rule {
     name     = "rate-limit"
     priority = 3
@@ -71,7 +72,7 @@ resource "aws_wafv2_web_acl" "keeper" {
     }
     statement {
       rate_based_statement {
-        limit              = 300
+        limit              = var.rate_limit
         aggregate_key_type = "IP"
       }
     }
