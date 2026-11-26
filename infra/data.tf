@@ -91,6 +91,11 @@ resource "aws_db_instance" "keeper" {
   skip_final_snapshot = true
   deletion_protection = false
   apply_immediately   = true
+
+  # SOC 감시용 로그 (observability.tf, enable_observability_logs). 꺼져 있으면 기본값 그대로
+  parameter_group_name            = local.obs_enabled ? aws_db_parameter_group.keeper[0].name : null
+  enabled_cloudwatch_logs_exports = local.obs_enabled ? ["postgresql"] : []
+  depends_on                      = [aws_cloudwatch_log_group.rds]
 }
 
 # ---- Secrets Manager: 앱 비밀값 (토큰 서명 키) -------------------------------------
