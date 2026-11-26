@@ -99,6 +99,11 @@ class JsonHandler(BaseHTTPRequestHandler):
         return body
 
     def _dispatch(self, method):
+        # 핸들러 객체는 연결 하나에 하나만 만들어져 같은 연결의 다음 요청에도 그대로 쓰인다.
+        # 이전 요청의 본문(_body)이 남아 있으면 다음 요청이 자기 본문 대신 그 본문을 읽고,
+        # 자기 본문은 연결에 남아 그다음 요청이 501로 깨진다. 그래서 요청마다 먼저 지운다.
+        vars(self).pop("_body", None)
+        self.conn_request_no = getattr(self, "conn_request_no", 0) + 1  # 이 연결의 몇 번째 요청인지(진단용)
         try:
             self._route(method)
         finally:

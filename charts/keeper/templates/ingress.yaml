@@ -9,6 +9,10 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip              # ALB → 파드 IP로 직접 (NetworkPolicy가 ALB 대역을 허용)
     alb.ingress.kubernetes.io/group.name: keeper           # Terraform이 이 이름으로 ALB를 찾아 DNS를 연결
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    {{- if .Values.rollout.enabled }}
+    # 빠진 대상의 진행 중 요청을 기다리는 시간 (기본 300초 → 짧게, preStop 대기보다는 길게)
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds={{ .Values.rollout.deregistrationDelaySeconds }}
+    {{- end }}
     {{- with .Values.ingress.accessLogBucket }}
     # ALB 접속 로그. 버킷은 persistent/에 있고 ALB 쓰기를 허용하는 정책이 있어야 한다
     alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket={{ . }},access_logs.s3.prefix=alb

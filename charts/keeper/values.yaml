@@ -44,6 +44,21 @@ networkPolicy:
   albSourceCidrs: []    # ALB가 있는 퍼블릭 서브넷 대역
   databaseCidrs: []     # RDS가 있는 데이터 서브넷 대역
 
+# 무중단 배포 (WEB 제안, 11/25 k6로 Before/After 측정. tests/zero-downtime/ 참고)
+# 파드가 교체될 때 ALB가 내려가는 파드로 요청을 보내 502가 나는 것을 막는다.
+#   1) 새 파드가 준비된 뒤에 옛 파드를 내린다 (maxUnavailable 0, maxSurge 1)
+#   2) 옛 파드는 종료 신호를 받으면 바로 끄지 않고 preStopSleepSeconds 동안 기다린다
+#      → 그 사이 ALB가 대상에서 빼고 새 요청을 보내지 않게 됨
+#   3) ALB는 빠진 대상의 진행 중 요청을 deregistrationDelaySeconds 동안만 기다린다 (기본 300초 → 짧게)
+#   4) 노드 교체·점검 때도 앱마다 최소 pdbMinAvailable 개는 남긴다 (PodDisruptionBudget)
+# 문제가 생기면 enabled: false 로 이전 동작으로 돌아간다.
+rollout:
+  enabled: true
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 45   # preStop 대기 + 앱 정상 종료 시간보다 길게
+  deregistrationDelaySeconds: 20      # preStop 대기보다 길게
+  pdbMinAvailable: 1
+
 # 로그인(Cognito). Terraform이 persistent/ 의 출력값으로 채움
 cognito:
   userPoolId: ""
