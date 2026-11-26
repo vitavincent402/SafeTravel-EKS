@@ -389,13 +389,16 @@ def build_app_from_env():
 
     store, ensure_ready = None, None
     if env.get("DB_HOST") and env.get("DB_SECRET_ARN"):
-        from db import apply_schema, make_connect
+        from db import apply_schema, make_connect, missing_tables
         from store import PgStore
 
         connect = make_connect(env["DB_HOST"], env.get("DB_NAME", "keeper"), env["DB_SECRET_ARN"], region)
         store = PgStore(connect)
         state = {"ready": False, "last_try": 0.0}
         lock = threading.Lock()
+        # SCHEMA_APPLY=off: table은 따로(keeper_migrate Job) 만들고, api는 있는지만 확인한다.
+        # 값이 없으면 지금처럼 api가 직접 만든다 (계정 분리 전과 같은 동작).
+        apply = env.get("SCHEMA_APPLY", "on").lower() != "off"
 
         def ensure_ready():
             """table이 준비되었는지 확인. 안 되어 있으면 만들어 본다 (10초에 한 번까지)."""
@@ -406,7 +409,13 @@ def build_app_from_env():
                     return state["ready"]
                 state["last_try"] = time.monotonic()
                 try:
-                    apply_schema(connect)
+                    if apply:
+                        apply_schema(connect)
+                    else:
+                        missing = missing_tables(connect)
+                        if missing:
+                            log("schema_missing", tables=",".join(missing))
+                            return False
                     if env.get("SEED_JSON"):
                         store.seed(json.loads(env["SEED_JSON"]))
                     state["ready"] = True
