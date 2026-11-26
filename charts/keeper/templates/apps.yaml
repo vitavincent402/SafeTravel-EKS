@@ -24,6 +24,13 @@ metadata:
     {{- include "keeper.labels" $root | nindent 4 }}
 spec:
   replicas: {{ $app.replicas }}
+  {{- if $root.Values.rollout.enabled }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # 새 파드가 준비되기 전에는 옛 파드를 내리지 않음
+      maxSurge: 1
+  {{- end }}
   selector:
     matchLabels:
       app: keeper-{{ $name }}
@@ -39,6 +46,9 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: keeper-{{ $name }}
+      {{- if $root.Values.rollout.enabled }}
+      terminationGracePeriodSeconds: {{ $root.Values.rollout.terminationGracePeriodSeconds }}
+      {{- end }}
       # 노드 두 대(AZ 두 곳)에 나눠 배치
       topologySpreadConstraints:
         - maxSkew: 1
@@ -88,6 +98,14 @@ spec:
             - name: KMS_KEY_ARN
               value: {{ $root.Values.aws.kmsKeyArn | quote }}
             {{- end }}
+          {{- if $root.Values.rollout.enabled }}
+          # 종료 신호를 받으면 바로 끄지 않고 기다림 → ALB가 대상에서 뺄 시간을 줌
+          # (쿠버네티스 내장 sleep 동작이라 이미지에 sleep 명령이 없어도 됨. 1.30 이상)
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ $root.Values.rollout.preStopSleepSeconds }}
+          {{- end }}
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 10

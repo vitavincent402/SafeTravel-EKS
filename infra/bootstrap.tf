@@ -30,6 +30,8 @@ locals {
       hosts          = local.all_domains
       certificateArn = local.use_domain ? aws_acm_certificate_validation.this[0].certificate_arn : ""
       wafAclArn      = var.hardening ? aws_wafv2_web_acl.keeper.arn : ""
+      # ALB 접속 로그 버킷(persistent/ alb_logs.tf). 비우면 로그를 켜지 않음
+      accessLogBucket = var.enable_alb_access_logs ? "${var.project}-alb-logs-${data.aws_caller_identity.current.account_id}" : ""
     }
     networkPolicy = {
       enabled        = var.hardening

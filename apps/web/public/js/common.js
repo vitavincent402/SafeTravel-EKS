@@ -116,7 +116,10 @@
         if (r.status === 413) { return "파일이 너무 커요. 5MB까지 올릴 수 있어요."; }
         if (r.status === 415) { return "PNG·JPEG·WEBP·PDF 파일만 올릴 수 있어요."; }
         if (r.status === 429) { return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요."; }
-        return "요청에 실패했어요." + (r.status ? " (" + r.status + ")" : "");
+        /* 모르는 오류는 서버가 보낸 이유 글자도 같이 보여 준다 (11/25 업로드 400 때 원인을 바로 못 본 일 반영).
+         * 글자는 textContent로만 쓰이지만, 영문·숫자·공백·_·- 만 남기고 60자로 자른다 */
+        var why = (typeof code === "string") ? code.replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 60) : "";
+        return "요청에 실패했어요." + (r.status ? " (" + r.status + (why ? " " + why : "") + ")" : "");
     }
 
 
