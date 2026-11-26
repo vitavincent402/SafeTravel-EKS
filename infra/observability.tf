@@ -122,7 +122,7 @@ resource "aws_db_parameter_group" "keeper" {
   count       = local.obs_enabled ? 1 : 0
   name        = "${var.project}-postgres16-logging"
   family      = "postgres16"
-  description = "접속·종료 기록을 로그에 남긴다 (SOC 감시용)"
+  description = "Log connections and disconnections for SOC monitoring" # RDS는 설명에 한글을 허용하지 않음
 
   parameter {
     name  = "log_connections"
