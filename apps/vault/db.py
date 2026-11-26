@@ -57,6 +57,18 @@ def apply_schema(connect, path=SCHEMA_PATH):
         conn.execute(sql)
 
 
+REQUIRED_TABLES = ("users", "guardians", "documents", "emergency_states",
+                   "access_requests", "view_tokens", "audit_logs")
+
+
+def missing_tables(connect):
+    """schema.sql의 table 중 없는 것 목록. 만들지는 않는다 (table 만들 권한이 없는 계정용)."""
+    names = ["public." + t for t in REQUIRED_TABLES]
+    with connect() as conn:
+        row = conn.execute("SELECT " + ", ".join(["to_regclass(%s)"] * len(names)), names).fetchone()
+    return [t for t, found in zip(REQUIRED_TABLES, row) if found is None]
+
+
 class PgBase:
     """SQL 실행 도우미. 결과를 dict로 돌려준다."""
 

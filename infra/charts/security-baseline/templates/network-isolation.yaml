@@ -38,3 +38,26 @@ spec:
         - { protocol: TCP, port: 53 }
 {{- end }}
 {{- end }}
+{{- if and .Values.networkIsolation.enabled .Values.networkIsolation.apiServerCidrs }}
+{{- if has "security-audit" .Values.networkIsolation.namespaces }}
+---
+# kube-bench는 정책 점검(CIS 5장)에서 쿠버네티스 API 서버를 조회한다. 기본 거부 때문에 API 서버로 못 나가면 점검이 끝나지 않으므로(11/26 확인)
+# kube-bench 파드만 API 서버가 있는 프라이빗 서브넷의 443으로 나가게 허용한다. 데이터 서브넷(RDS 5432)은 여전히 막힌다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kube-bench-api
+  namespace: security-audit
+spec:
+  podSelector:
+    matchLabels: { app: kube-bench }
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        {{- range .Values.networkIsolation.apiServerCidrs }}
+        - ipBlock: { cidr: {{ . }} }
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 443 }
+{{- end }}
+{{- end }}

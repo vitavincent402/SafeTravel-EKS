@@ -73,8 +73,9 @@ module "eks" {
 
   # 감사 로그: 누가 클러스터 API에 무엇을 요청했는지 CloudWatch Logs에 남깁니다 (CIS EKS 2.1.1).
   # 모듈 기본값과 같지만 코드에서 보이도록 명시하고, 보존 기간만 90일 → 7일로 줄였습니다(비용).
-  # 로그 그룹은 destroy 때 같이 지워지므로, 증적이 필요하면 destroy 전에 내보내세요.
+  # 로그 그룹(/aws/eks/keeper-eks/cluster, 7일)은 persistent/log_groups.tf 가 만든다. destroy 때 지워지지 않아 SOC 증적이 남는다.
   cluster_enabled_log_types              = var.hardening ? ["api", "audit", "authenticator"] : []
+  create_cloudwatch_log_group            = false
   cloudwatch_log_group_retention_in_days = 7
 
   # terraform apply를 실행한 사람(역할)에게 클러스터 관리자 권한

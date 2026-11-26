@@ -23,8 +23,14 @@ variable "soc_reader_external_id" {
 variable "soc_reader_log_groups" {
   description = "SOC 서버가 읽을 CloudWatch 로그 그룹 이름"
   type        = list(string)
-  # /aws/lambda/keeper-account-lock: 계정 잠금 Lambda 로그(account_lock.tf). 그룹이 없어도(꺼짐) 권한은 이름으로 걸려 있어 문제없다
-  default = ["/aws/eks/keeper-eks/cluster", "aws-waf-logs-keeper", "aws-waf-logs-cognito", "/aws/lambda/keeper-account-lock"]
+  default = [
+    "/aws/eks/keeper-eks/cluster", "aws-waf-logs-keeper", "aws-waf-logs-cognito",
+    # 파드 로그·CPU/메모리(application·performance)와 DB 로그. infra/observability.tf 를 켜면 생긴다
+    "/aws/containerinsights/keeper-eks/application", "/aws/containerinsights/keeper-eks/performance",
+    "/aws/rds/instance/keeper-db/postgresql",
+    # 계정 잠금 Lambda 로그(account_lock.tf). 그룹이 없어도(꺼짐) 권한은 이름으로 걸려 있어 문제없다
+    "/aws/lambda/keeper-account-lock",
+  ]
 }
 
 locals {
