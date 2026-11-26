@@ -195,8 +195,18 @@
         if (f && !$("upTitle").value) { $("upTitle").value = f.name.replace(/\.[^.]+$/, ""); }
     });
 
+    /* 업로드 중에는 올리기 버튼을 잠근다: 큰 파일은 몇 초 걸려 두 번 눌러 같은 서류가 2개 저장되던 문제(11/26 db 보고) */
+    var uploading = false;
+    var upBtn = $("upForm").querySelector('button[type="submit"]');
+    function setUploading(on) {
+        uploading = on;
+        upBtn.disabled = on;
+        upBtn.textContent = on ? "올리는 중…" : "올리기";
+    }
+
     $("upForm").addEventListener("submit", function (ev) {
         ev.preventDefault();
+        if (uploading) { return; }
         var f = $("upFile").files[0];
         if (!f) { kp.toast("파일을 골라 주세요."); return; }
         var bad = fileProblem(f);
@@ -205,12 +215,17 @@
         /* api는 제목 1~50자가 필수: 비어 있으면 파일 이름으로 */
         form.append("title", ($("upTitle").value.trim() || f.name.replace(/\.[^.]+$/, "") || "서류").slice(0, 50));
         form.append("file", f);
+        setUploading(true);
         api.upload("/api/docs", form).then(function (r) {
+            setUploading(false);
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
             kp.toast("서류를 금고에 넣었어요.");
             $("upForm").reset();
             $("upName").textContent = "파일 고르기";
             loadDocs();
+        }, function () {
+            setUploading(false);
+            kp.toast("요청에 실패했어요. 잠시 뒤 다시 올려 주세요.");
         });
     });
 
