@@ -58,6 +58,23 @@ variable "github_oidc_sub_prefix" {
   default     = ""
 }
 
+variable "github_deploy_environment" {
+  description = "배포 워크플로가 쓰는 GitHub Environment 이름(예: production). 비우면 쓰지 않음. 넣으면 그 Environment를 거친 실행(필수 검토자 승인)도 AWS 역할을 받을 수 있다. 먼저 이 값을 넣고 apply한 뒤 워크플로의 environment 줄이 들어간 PR을 병합한다"
+  type        = string
+  default     = ""
+}
+
+variable "github_oidc_allow_main_ref" {
+  description = "true(기본)면 main 브랜치에서 돈 워크플로가 Environment 승인 없이도 AWS 역할을 받을 수 있다. Environment가 준비되고 검증된 뒤 false로 바꾸면 검토자 승인을 거친 배포만 역할을 받는다"
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.github_oidc_allow_main_ref || var.github_deploy_environment != ""
+    error_message = "github_oidc_allow_main_ref를 false로 하려면 github_deploy_environment를 먼저 정해야 합니다(그렇지 않으면 배포 역할을 받을 수 있는 주체가 없어집니다)."
+  }
+}
+
 variable "team_members" {
   description = "팀원의 클러스터 권한. 키는 이름, arn은 IAM 사용자 ARN, level은 admin | developer | viewer | tester(조회 + keeper 네임스페이스 파드 생성만, RED용)"
   type = map(object({
