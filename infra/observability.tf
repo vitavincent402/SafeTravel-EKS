@@ -59,20 +59,56 @@ resource "aws_iam_role" "cw_agent" {
   assume_role_policy = data.aws_iam_policy_document.cw_agent_trust[0].json
 }
 
-resource "aws_iam_role_policy_attachment" "cw_agent" {
-  count      = local.obs_enabled ? 1 : 0
-  role       = aws_iam_role.cw_agent[0].name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+# AWS 관리형 CloudWatchAgentServerPolicy는 X-Ray·SSM·보관 기간 변경까지 포함해 넓다.
+# 쓰기만, 미리 만든 로그 그룹 4개와 ContainerInsights 지표 이름공간으로 좁힌 정책을 쓴다.
+resource "aws_iam_role_policy" "cw_agent" {
+  count = local.obs_enabled ? 1 : 0
+  name  = "ship-logs-and-metrics"
+  role  = aws_iam_role.cw_agent[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "WriteContainerInsightsLogs"
+        Effect = "Allow"
+        Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+        Resource = flatten([for g in local.obs_log_groups : [
+          "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:${g}",
+          "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:${g}:*",
+        ]])
+      },
+      {
+        Sid      = "AgentChecksLogGroups"
+        Effect   = "Allow"
+        Action   = ["logs:DescribeLogGroups"]
+        Resource = "*"
+      },
+      {
+        Sid       = "WriteMetrics"
+        Effect    = "Allow"
+        Action    = ["cloudwatch:PutMetricData"]
+        Resource  = "*"
+        Condition = { StringEquals = { "cloudwatch:namespace" = "ContainerInsights" } }
+      },
+      {
+        Sid      = "NodeVolumeTags"
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeTags", "ec2:DescribeVolumes"]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 resource "aws_eks_addon" "cloudwatch_observability" {
   count                    = local.obs_enabled ? 1 : 0
   cluster_name             = module.eks.cluster_name
   addon_name               = "amazon-cloudwatch-observability"
+  addon_version            = "v8.0.1-eksbuild.1" # 고정(자동 최신 방지). 올릴 때는 PR로
   service_account_role_arn = aws_iam_role.cw_agent[0].arn
 
   # 노드가 있어야 파드가 뜬다. 로그 그룹이 먼저 있어야 보관 기간이 적용된다.
-  depends_on = [module.eks, aws_cloudwatch_log_group.obs, aws_iam_role_policy_attachment.cw_agent]
+  depends_on = [module.eks, aws_cloudwatch_log_group.obs, aws_iam_role_policy.cw_agent]
 }
 
 # ---- RDS: 로그 내보내기 + 접속·종료 기록 ------------------------------------------------
@@ -95,5 +131,11 @@ resource "aws_db_parameter_group" "keeper" {
   parameter {
     name  = "log_disconnections"
     value = "1"
+  }
+  # 오류가 난 쿼리의 문장을 로그에 남기지 않는다(기본은 error 이상이면 문장 기록).
+  # 쿼리 기록(log_statement)과 느린 쿼리(log_min_duration_statement)는 기본값(꺼짐) 그대로 둔다.
+  parameter {
+    name  = "log_min_error_statement"
+    value = "panic"
   }
 }
