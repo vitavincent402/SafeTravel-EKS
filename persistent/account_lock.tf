@@ -83,7 +83,7 @@ resource "aws_iam_role" "account_lock" {
   name        = "${var.name}-account-lock-role"
   description = "SOC가 승인한 Cognito 계정 잠금/해제 (대기열 소비자)"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
