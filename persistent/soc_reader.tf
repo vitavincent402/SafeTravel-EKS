@@ -76,6 +76,26 @@ resource "aws_iam_role_policy" "soc_reader" {
         Action   = ["logs:DescribeLogGroups", "logs:GetQueryResults", "logs:StopQuery"]
         Resource = "*"
       },
+      {
+        # ALB 접속 로그 버킷 읽기만(쓰기·삭제 없음). 쿼리 문자열이 들어 있으니 SOC 수집기가 읽자마자 버린다
+        Sid      = "ReadAlbAccessLogs"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.alb_logs.arn}/*"
+      },
+      {
+        Sid      = "ListAlbAccessLogs"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.alb_logs.arn
+      },
+      {
+        # 노드(EC2) CPU·네트워크·디스크 I/O 지표 읽기용. GetMetricData는 지표 단위로 제한할 수 없어 계정의 모든 지표를 읽을 수 있다(읽기 전용)
+        Sid      = "ReadMetrics"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:GetMetricData"]
+        Resource = "*"
+      },
     ]
   })
 }
