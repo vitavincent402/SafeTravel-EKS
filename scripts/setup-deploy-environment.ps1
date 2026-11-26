@@ -41,5 +41,13 @@ gh api -X PUT "repos/$Repo/environments/$Environment" --input $tmp | Out-Null
 # main 브랜치에서 시작한 배포만 이 Environment를 쓸 수 있게 한다
 gh api -X POST "repos/$Repo/environments/$Environment/deployment-branch-policies" -f name=main -f type=branch 2>$null | Out-Null
 
+# 위 명령은 "이미 있음" 오류를 숨기려고 2>$null 을 쓴다. 실제 실패(네트워크·권한)도 숨겨지므로 결과를 확인한다.
+# main 정책이 없으면 허용 명단이 비어 어떤 브랜치도 배포할 수 없게 된다.
+$names = gh api "repos/$Repo/environments/$Environment/deployment-branch-policies" --jq ".branch_policies[].name"
+if ($names -notcontains "main") {
+  Write-Output "main 브랜치 정책이 없습니다. 이대로면 배포가 막힙니다. 다시 실행하거나 GitHub 설정에서 추가하세요."
+  exit 1
+}
+
 Write-Output ("완료: Environment '{0}' 검토자 {1}명, main 브랜치만 허용, 본인 승인 금지={2}" -f $Environment, $Reviewers.Count, [bool]$PreventSelfReview)
 Write-Output "다음: infra/terraform.tfvars 에 github_deploy_environment = `"$Environment`" 를 넣고 terraform apply (스크립트 머리말의 순서 참고)"
