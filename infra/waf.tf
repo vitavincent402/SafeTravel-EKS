@@ -433,6 +433,10 @@ resource "aws_wafv2_web_acl_logging_configuration" "keeper" {
       name = "x-view-token"
     }
   }
+  # 로그인 후 돌아오는 요청의 쿼리(인증 코드 code 등)가 로그에 남지 않게 가린다 (SOC 요청, 11/25)
+  redacted_fields {
+    query_string {}
+  }
 
   depends_on = [aws_cloudwatch_log_resource_policy.waf]
 }

@@ -37,6 +37,7 @@ ingress:
   hosts: []             # 주소 목록. 비어 있으면 ALB 주소로 HTTP 접속 (예: ["travelsafe.click", "www.travelsafe.click"])
   certificateArn: ""    # 있으면 HTTPS + HTTP→HTTPS 리다이렉트
   wafAclArn: ""
+  accessLogBucket: ""   # 있으면 ALB 접속 로그를 이 S3 버킷(접두어 alb)에 남김 (SSE-S3 버킷, 보존은 버킷 쪽에서)
 
 networkPolicy:
   enabled: true
