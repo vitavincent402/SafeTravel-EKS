@@ -14,6 +14,7 @@ kubeBench:
 networkIsolation:
   enabled: true                # false면 default·security-audit 기본 거부를 만들지 않음 (Before 시연용)
   namespaces: ["default", "security-audit"]
+  apiServerCidrs: []           # kube-bench가 API 서버(443)에 닿게 허용할 대역. Terraform이 프라이빗 서브넷으로 채움
 
 podTester:
   enabled: true                # keeper-red(level=tester)가 위험 파드를 서버 dry-run으로 시험할 수 있게 Role을 만듦
