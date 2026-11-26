@@ -22,11 +22,20 @@ locals {
   ]
 }
 
-# 로그 그룹을 먼저 만들어 보관 기간을 7일로 고정한다(자동 생성되면 무기한 보관 → 비용, destroy 때 남음)
-resource "aws_cloudwatch_log_group" "obs" {
-  for_each          = local.obs_enabled ? toset(local.obs_log_groups) : toset([])
-  name              = each.value
-  retention_in_days = 7
+# 로그 그룹(위 4개와 RDS 그룹)은 persistent/log_groups.tf 가 만든다(7일 보관, destroy 때 지워지지 않음).
+# 예전에 여기서 만들던 그룹은 지우지 않고 관리만 persistent/ 로 넘긴다.
+removed {
+  from = aws_cloudwatch_log_group.obs
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_cloudwatch_log_group.rds
+  lifecycle {
+    destroy = false
+  }
 }
 
 # ---- 에이전트용 IRSA 역할 ------------------------------------------------------------
@@ -107,16 +116,11 @@ resource "aws_eks_addon" "cloudwatch_observability" {
   addon_version            = "v8.0.1-eksbuild.1" # 고정(자동 최신 방지). 올릴 때는 PR로
   service_account_role_arn = aws_iam_role.cw_agent[0].arn
 
-  # 노드가 있어야 파드가 뜬다. 로그 그룹이 먼저 있어야 보관 기간이 적용된다.
-  depends_on = [module.eks, aws_cloudwatch_log_group.obs, aws_iam_role_policy.cw_agent]
+  # 노드가 있어야 파드가 뜬다. 로그 그룹은 persistent/ 에 항상 있다.
+  depends_on = [module.eks, aws_iam_role_policy.cw_agent]
 }
 
 # ---- RDS: 로그 내보내기 + 접속·종료 기록 ------------------------------------------------
-resource "aws_cloudwatch_log_group" "rds" {
-  count             = local.obs_enabled ? 1 : 0
-  name              = "/aws/rds/instance/${var.project}-db/postgresql"
-  retention_in_days = 7
-}
 
 resource "aws_db_parameter_group" "keeper" {
   count       = local.obs_enabled ? 1 : 0
