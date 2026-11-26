@@ -187,6 +187,54 @@ resource "aws_synthetics_canary" "web" {
   depends_on = [aws_iam_role_policy.canary, terraform_data.bootstrap_deploy]
 }
 
+# ---- 카나리 실행 로그 그룹: 7일 보관 + destroy 때 삭제 ----
+# 카나리 Lambda가 /aws/lambda/cwsyn-<이름>-<카나리 ID> 그룹을 스스로 만든다. 보관 기간이 무기한이고
+# Terraform 밖이라 destroy 뒤에도 남아, 구축마다 이름이 다른 그룹이 쌓였다.
+# 이름에 매번 바뀌는 카나리 ID가 들어가 persistent/ 에 미리 만들 수 없으므로, 카나리를 만든 뒤 7일 보관을 걸고
+# destroy 때 지운다(카나리 결과 S3 버킷도 매일 지워지므로 같은 수명).
+# 그룹 이름 = /aws/lambda/cwsyn-<카나리 이름>-<카나리 Id>. Id는 Terraform 속성으로 나오지 않아(engine_arn도 비어 있음) CLI로 조회한다.
+locals {
+  canary_ps_group   = "$id = aws synthetics get-canary --name $env:CANARY --query Canary.Id --output text; if (-not $id -or $id -eq 'None') { exit 1 }; $g = \"/aws/lambda/cwsyn-$($env:CANARY)-$id\""
+  canary_bash_group = "id=$(aws synthetics get-canary --name \"$CANARY\" --query Canary.Id --output text) && [ -n \"$id\" ] && [ \"$id\" != None ] && g=\"/aws/lambda/cwsyn-$CANARY-$id\""
+}
+
+resource "terraform_data" "canary_log_group" {
+  count = local.monitor ? 1 : 0
+  input = {
+    canary     = aws_synthetics_canary.web[0].id # 카나리 이름. 카나리가 바뀌면 다시 실행
+    region     = var.region
+    windows    = local.is_windows
+    ps_group   = local.canary_ps_group
+    bash_group = local.canary_bash_group
+  }
+
+  # 카나리 첫 실행이 먼저 그룹을 만들었을 수 있으므로 만들기 실패(이미 있음)는 무시하고 보관 기간만 확실히 건다
+  provisioner "local-exec" {
+    interpreter = self.input.windows ? ["PowerShell", "-Command"] : ["bash", "-c"]
+    environment = { CANARY = self.input.canary, AWS_REGION = self.input.region }
+    command = self.input.windows ? join("; ", [
+      self.input.ps_group,
+      "aws logs create-log-group --log-group-name $g 2>$null",
+      "aws logs put-retention-policy --log-group-name $g --retention-in-days 7",
+      "if ($LASTEXITCODE -ne 0) { exit 1 }",
+      "Write-Output \"retention 7d: $g\"",
+      ]) : join(" && ", [
+      self.input.bash_group,
+      "{ aws logs create-log-group --log-group-name \"$g\" 2>/dev/null || true; }",
+      "aws logs put-retention-policy --log-group-name \"$g\" --retention-in-days 7",
+      "echo \"retention 7d: $g\"",
+    ])
+  }
+
+  # destroy 때 카나리보다 먼저 실행되므로 Id를 아직 조회할 수 있다. 실패해도 destroy는 계속한다
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = self.input.windows ? ["PowerShell", "-Command"] : ["bash", "-c"]
+    environment = { CANARY = self.input.canary, AWS_REGION = self.input.region }
+    command     = self.input.windows ? "${self.input.ps_group}; aws logs delete-log-group --log-group-name $g 2>$null; exit 0" : "${self.input.bash_group} && aws logs delete-log-group --log-group-name \"$g\" 2>/dev/null; true"
+  }
+}
+
 # ---- 알림 주제 (alert_topic_arn 이 없을 때만 여기서 만든다) ----
 resource "aws_sns_topic" "alerts" {
   count = local.monitor && var.alert_topic_arn == "" && var.alert_email != "" ? 1 : 0
