@@ -24,7 +24,8 @@
 [보호자 관리] (추가)
   GET  /api/guardians                       {my_guardians: [{.., status: pending|accepted}], guarding}
   POST /api/guardians {email}               보호자 초대 → 202 {invited}. 가입 여부와 상관없이 같은 응답
-  DELETE /api/guardians/{user_id}           보호자 해제 · 초대 취소
+  DELETE /api/guardians/{user_id}           보호자 해제 · 초대 취소 (그 보호자의 대기 요청·열람 토큰도 취소)
+  DELETE /api/guardian/travelers/{user_id}  보호자가 스스로 연결 끊기 (위와 같이 정리)
   GET  /api/guardians/invites               받은 보호자 요청(수락 대기) [{id, email, name, invited_at}]
   POST /api/guardians/invites/{owner_id}/accept {agree: true}   수락(열람 조건 동의 필수)
   POST /api/guardians/invites/{owner_id}/decline                거절
@@ -109,6 +110,7 @@ class ApiHandler(JsonHandler):
         ("POST", r"/api/guardian/view-token", "g_view_token"),
         ("GET", rf"/api/guardian/travelers/(?P<user_id>{UUID})/docs", "g_docs_list"),
         ("GET", rf"/api/guardian/docs/(?P<doc_id>{UUID})", "g_docs_view"),
+        ("DELETE", rf"/api/guardian/travelers/(?P<user_id>{UUID})", "g_leave"),
         # 보호자 관리
         ("GET", r"/api/guardians", "guardians_list"),
         ("POST", r"/api/guardians", "guardians_add"),
@@ -205,7 +207,8 @@ class ApiHandler(JsonHandler):
     def me(self):
         user = self.current_user()
         settle_requests(self.app.store, user.id, self.app.now())
-        return {**user.to_dict(), **emergency_info(self.app.store, user.id)}
+        return {**user.to_dict(), **emergency_info(self.app.store, user.id),
+                "request_wait_seconds": int(REQUEST_WAIT.total_seconds())}   # 화면에 자동 비상 규칙을 보여 주기 위함
 
     # ---------- 여행자 ----------
 
@@ -385,12 +388,29 @@ class ApiHandler(JsonHandler):
         self.app.store.audit(user.id, "guardian_decline", "allowed")
         return {"declined": owner_id}
 
+    def disconnect(self, owner_id, guardian_id):
+        """보호자 관계를 끊는다. 관계 행만 지우면 그 보호자가 보낸 대기 요청이 남아 시간이 지나면
+        자동 비상이 되고, 열람 토큰도 남아 다시 수락하면 되살아난다. 셋을 함께 정리한다."""
+        store, now = self.app.store, self.app.now()
+        if not store.remove_guardian(owner_id, guardian_id):
+            return False
+        store.cancel_guardian_requests(owner_id, guardian_id, now)
+        store.revoke_guardian_tokens(owner_id, guardian_id, now)
+        return True
+
     def guardians_remove(self, guardian_id):
         user = self.current_user()
-        if not self.app.store.remove_guardian(user.id, guardian_id.lower()):
+        if not self.disconnect(user.id, guardian_id.lower()):
             raise HttpError(404, "not found")
         self.app.store.audit(user.id, "guardian_remove", "allowed")
         return {"removed": guardian_id}
+
+    def g_leave(self, user_id):
+        user = self.current_user()
+        if not self.disconnect(user_id.lower(), user.id):
+            raise HttpError(404, "not found")
+        self.app.store.audit(user.id, "guardian_leave", "allowed")
+        return {"left": user_id}
 
 
 # ---------- 실행 ----------

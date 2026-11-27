@@ -67,6 +67,9 @@
         var head = el("div", "person-head");
         head.appendChild(el("b", null, t.name));
         head.appendChild(el("span", "pill " + (t.emergency ? "red" : "green"), t.emergency ? "비상" : "평소"));
+        var lv = button("연결 끊기", "btn small ghost-red", function () { leave(t, lv); });
+        lv.classList.add("leave");
+        head.appendChild(lv);
         body.appendChild(head);
         body.appendChild(el("p", "sub", t.emergency
             ? "비상 상태" + (t.emergency_reason ? " · " + kp.reason(t.emergency_reason) : "") + (t.emergency_since ? " · " + kp.when(t.emergency_since) + "부터" : "")
@@ -172,11 +175,44 @@
         });
     }
 
+    /* 목록에서 빠진 사람(여행자가 보호자를 해제했거나 내가 끊음)의 카드와 열린 서류를 정리한다 */
+    function drop(id, text) {
+        var c = cards[id];
+        if (!c) { return; }
+        if (c.view) { c.view = null; kp.closeModal(); }
+        stopAll(c);
+        revoke(c);
+        c.box.remove();
+        delete cards[id];
+        if (text) { kp.toast(text); }
+    }
+
+    function leave(t, btn) {
+        if (btn.dataset.armed !== "1") {
+            btn.dataset.armed = "1";
+            btn.textContent = "정말 끊기";
+            kp.toast("한 번 더 누르면 연결이 끊기고, 이 사람의 서류를 더 볼 수 없어요.");
+            setTimeout(function () { btn.dataset.armed = ""; btn.textContent = "연결 끊기"; }, 4000);
+            return;
+        }
+        btn.disabled = true;
+        api.call("DELETE", "/api/guardian/travelers/" + encodeURIComponent(t.user_id)).then(function (r) {
+            if (!r.ok) { kp.toast(kp.errText(r)); btn.disabled = false; return; }
+            drop(t.user_id, t.name + " 님과 연결을 끊었어요.");
+            /* 지키는 사람이 더 없으면 보호자가 아니므로 여행자 화면으로 간다 */
+            api.call("GET", "/api/me").then(function (m) {
+                if (m.ok && m.data && m.data.role !== "guardian") { location.replace("/traveler.html"); } else { poll(); }
+            });
+        });
+    }
+
     function poll() {
         return api.call("GET", "/api/guardian/travelers").then(function (r) {
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
             var list = r.data || [];
-            var root = $("travelers");
+            var root = $("travelers"), ids = {};
+            list.forEach(function (t) { ids[t.user_id] = true; });
+            Object.keys(cards).forEach(function (id) { if (!ids[id]) { drop(id, "연결이 해제되어 더 이상 서류를 볼 수 없어요."); } });
             if (!Object.keys(cards).length) { root.textContent = ""; }
             if (!list.length) { root.appendChild(el("p", "muted", "연결된 사람이 없어요.")); return; }
             list.forEach(render);
