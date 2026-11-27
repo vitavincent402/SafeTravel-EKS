@@ -353,6 +353,52 @@ def test_보호자_요청_거절(env):
     assert call(api, "GET", "/api/guardians/invites", GUARDIAN)[1] == []
 
 
+def test_보호자_해제하면_요청_토큰도_끊김(env):
+    api, clock = env["api"], env["clock"]
+    owner, guardian, doc_id = setup_people(env)
+    # 보호자가 열람을 요청한 뒤 여행자가 보호자를 해제 → 대기 요청이 취소되어 시간이 지나도 자동 비상이 되지 않음
+    assert call(api, "POST", "/api/guardian/requests", GUARDIAN, {"user_id": owner["id"]})[0] == 201
+    assert call(api, "DELETE", f"/api/guardians/{guardian['id']}", OWNER)[0] == 200
+    clock.advance(minutes=5)
+    assert call(api, "GET", "/api/me", OWNER)[1]["emergency"] is False
+    assert call(api, "GET", "/api/requests/pending", OWNER)[0] == 204   # 대기 요청 없음
+    assert call(api, "GET", "/api/guardian/travelers", GUARDIAN)[1] == []
+    assert call(api, "GET", "/api/me", GUARDIAN)[1]["role"] == "user"
+
+
+def test_다시_수락해도_옛_열람_토큰은_무효(env):
+    api = env["api"]
+    owner, guardian, doc_id = setup_people(env)
+    call(api, "POST", "/api/sos", OWNER)
+    vt = call(api, "POST", "/api/guardian/view-token", GUARDIAN, {"user_id": owner["id"]})[1]["view_token"]
+    assert call(api, "GET", f"/api/guardian/docs/{doc_id}", GUARDIAN, view_token=vt)[0] == 200
+    assert call(api, "DELETE", f"/api/guardians/{guardian['id']}", OWNER)[0] == 200
+    assert call(api, "GET", f"/api/guardian/docs/{doc_id}", GUARDIAN, view_token=vt) ==         (403, {"error": "not_guardian"})
+    # 다시 초대·수락해도 해제 전에 받은 토큰은 살아나지 않음
+    call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"})
+    call(api, "POST", f"/api/guardians/invites/{owner['id']}/accept", GUARDIAN, {"agree": True})
+    assert call(api, "GET", f"/api/guardian/docs/{doc_id}", GUARDIAN, view_token=vt) ==         (403, {"error": "invalid_view_token"})
+
+
+def test_보호자가_스스로_연결_끊기(env):
+    api = env["api"]
+    owner, guardian, _ = setup_people(env)
+    assert call(api, "DELETE", f"/api/guardian/travelers/{owner['id']}", STRANGER)[0] == 404
+    assert call(api, "DELETE", f"/api/guardian/travelers/{owner['id']}", GUARDIAN)[0] == 200
+    assert call(api, "GET", "/api/guardians", OWNER)[1]["my_guardians"] == []
+    assert call(api, "GET", "/api/me", GUARDIAN)[1]["role"] == "user"
+
+
+def test_수락_전에는_이름을_보이지_않음(env):
+    api = env["api"]
+    call(api, "GET", "/api/me", OWNER)
+    call(api, "GET", "/api/me", GUARDIAN)
+    call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"})
+    g = call(api, "GET", "/api/guardians", OWNER)[1]["my_guardians"][0]
+    assert (g["email"], g["name"], g["status"]) == ("guardian@example.com", None, "pending")
+    assert "request_wait_seconds" in call(api, "GET", "/api/me", OWNER)[1]
+
+
 def test_로그인_없으면_401(env):
     api = env["api"]
     for path in ("/api/me", "/api/docs", "/api/guardian/travelers", "/api/requests/pending"):

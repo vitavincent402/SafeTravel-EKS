@@ -120,7 +120,7 @@
                 var n = s.guardians.length;
                 s.guardians = s.guardians.filter(function (g) { return g.id !== decodeURIComponent(m[1]); });
                 if (s.guardians.length === n) { return err(404, "not found"); }
-                if (!isGuardian(s)) { s.viewToken = null; }
+                if (!isGuardian(s)) { s.viewToken = null; if (s.request && s.request.status === "pending") { s.request.status = "cancelled"; } }
                 save(s); return res(204);
             }
             if (method === "GET" && url === "/api/requests/pending") {
@@ -146,6 +146,13 @@
                 emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason,
                 request: s.request ? { request_id: s.request.id, status: s.request.status, wait_until: s.request.expires_at } : null
             }]);
+        }
+        if (method === "DELETE" && /^\/api\/guardian\/travelers\/[^/]+$/.test(url)) {
+            if (!isGuardian(s)) { return err(404, "not found"); }
+            s.guardians = s.guardians.filter(function (g) { return g.id !== s.guardian.id; });
+            s.viewToken = null;
+            if (s.request && s.request.status === "pending") { s.request.status = "cancelled"; }
+            save(s); return res(200, { left: s.traveler.id });
         }
         if (url !== "/api/guardian/travelers" && !isGuardian(s)) { return err(403, "not_guardian"); }
         if (method === "POST" && url === "/api/guardian/requests") {

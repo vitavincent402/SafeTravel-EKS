@@ -249,6 +249,7 @@
                 li.appendChild(el("span", null, "🧑‍🤝‍🧑"));
                 var who = el("div", "who2");
                 who.appendChild(el("b", null, g.name || g.email || "보호자"));
+                /* 수락 전에는 서버가 이름을 주지 않는다(이메일만) */
                 if (g.email && g.name) { who.appendChild(el("span", null, g.email)); }
                 li.appendChild(who);
                 var pending = g.status === "pending";
@@ -267,6 +268,7 @@
         if (btn.dataset.armed !== "1") {
             btn.dataset.armed = "1";
             btn.textContent = "정말 " + btn.dataset.label;
+            kp.toast("한 번 더 누르면 " + btn.dataset.label + "돼요. 진행 중인 요청과 열람도 함께 끝나요.");
             setTimeout(function () { btn.dataset.armed = ""; btn.textContent = btn.dataset.label; }, 4000);
             return;
         }
