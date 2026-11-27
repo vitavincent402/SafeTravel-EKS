@@ -16,3 +16,6 @@ evidence/
 
 # 가용성 감시 스크립트 묶음 (terraform이 만듦)
 infra/.build/
+tests/e2e/shots/
+e2e-shots/
+__pycache__/

@@ -1,0 +1,57 @@
+# 화면 E2E 시험: web 이미지를 그대로 빌드해 nginx로 띄우고, 체험 모드로 핵심 흐름과 보안 헤더를 확인한다.
+# AWS 권한은 쓰지 않는다(클러스터·Cognito·api 없이 동작). 실패하면 화면 캡처와 nginx 로그를 결과물로 올린다.
+name: web-e2e
+
+on:
+  pull_request:
+    paths: ["apps/web/**", "tests/e2e/**", ".github/workflows/web-e2e.yml"]
+  push:
+    branches: [main]
+    paths: ["apps/web/**", "tests/e2e/**", ".github/workflows/web-e2e.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: web 이미지 빌드 (배포와 같은 Dockerfile)
+        run: docker build -t keeper-web:e2e apps/web
+
+      - name: web 띄우기 (8080)
+        run: |
+          docker run -d --name web -p 8080:8080 keeper-web:e2e
+          for i in $(seq 1 30); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Playwright 설치
+        run: |
+          pip install playwright==1.48.0 pytest==8.3.3
+          python -m playwright install --with-deps chromium
+
+      - name: E2E 시험
+        env:
+          BASE_URL: http://localhost:8080
+          E2E_HEADERS: "1"
+          E2E_SHOTS: e2e-shots
+        run: pytest tests/e2e -v
+
+      - name: 실패 시 nginx 로그
+        if: failure()
+        run: docker logs web > e2e-shots/nginx.log 2>&1 || true
+
+      - name: 실패 시 결과물 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shots
+          path: e2e-shots/
+          retention-days: 7
