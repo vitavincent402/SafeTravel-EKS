@@ -26,6 +26,13 @@ CREATE TABLE IF NOT EXISTS guardians (
 ALTER TABLE guardians ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'accepted';
 ALTER TABLE guardians ADD COLUMN IF NOT EXISTS accepted_at timestamptz;
 ALTER TABLE guardians ALTER COLUMN status SET DEFAULT 'pending';
+-- 예전 DB 경로에는 위 CREATE TABLE의 CHECK가 없으므로 같은 이름(PostgreSQL 기본 이름)으로 한 번만 추가
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'guardians_status_check') THEN
+        ALTER TABLE guardians ADD CONSTRAINT guardians_status_check CHECK (status IN ('pending', 'accepted'));
+    END IF;
+END $$;
 
 -- 3. 서류: 파일 자체는 S3에, 여기에는 정보만 저장
 CREATE TABLE IF NOT EXISTS documents (
