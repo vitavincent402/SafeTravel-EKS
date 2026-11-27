@@ -20,6 +20,7 @@
 GRANT SELECT, INSERT ON users TO keeper_api;
 GRANT UPDATE (email, name) ON users TO keeper_api;                                   -- login
 GRANT SELECT, INSERT, DELETE ON guardians TO keeper_api;
+GRANT UPDATE (status, accepted_at) ON guardians TO keeper_api;                       -- 보호자 수락
 GRANT SELECT, INSERT ON emergency_states TO keeper_api;
 GRANT UPDATE (status, trigger_source, changed_at) ON emergency_states TO keeper_api; -- set_emergency
 GRANT SELECT, INSERT ON access_requests TO keeper_api;

@@ -245,6 +245,9 @@ button:focus-visible, input:focus-visible, a:focus-visible, label:focus-within {
 .doc .acts { display: flex; gap: .4rem; margin-top: .45rem; }
 .doc .acts .btn { margin-top: 0; flex: 1; }
 .btn.ghost-red { color: var(--red); border-color: #f3c4c4; background: #fff; }
+.gdlist li.invite { flex-direction: column; align-items: stretch; gap: .55rem; }
+.gdlist li.invite .agree { display: flex; gap: .5rem; align-items: flex-start; font-size: .88rem; color: var(--muted); }
+.gdlist li.invite .invite-actions { display: flex; gap: .5rem; }
 .doc .thumb .pdf { font-size: 2rem; }
 .pdfbox { display: grid; justify-items: center; gap: .6rem; padding: 2.5rem 1rem; text-align: center; }
 .pdfbox .ico { font-size: 2.6rem; }

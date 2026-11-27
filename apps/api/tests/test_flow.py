@@ -173,7 +173,8 @@ def setup_people(e):
     api = e["api"]
     owner = call(api, "GET", "/api/me", OWNER)[1]
     guardian = call(api, "GET", "/api/me", GUARDIAN)[1]
-    assert call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"})[0] == 201
+    assert call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"})[0] == 202
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/accept", GUARDIAN, {"agree": True})[0] == 200
     code, doc = upload(api, OWNER, "여권", "passport.png", PNG)
     assert code == 201, doc
     return owner, guardian, doc["id"]
@@ -311,6 +312,45 @@ def test_보호자가_아니면_거부(env):
     assert call(api, "GET", "/api/guardian/travelers", STRANGER)[1] == []
     # 여행자 주소로 남의 서류를 보려 해도 거부 (토큰 없음)
     assert call(api, "GET", f"/api/docs/{doc_id}", STRANGER)[0] == 403
+
+
+def test_보호자는_수락해야_열람_조건에_들어감(env):
+    api = env["api"]
+    owner = call(api, "GET", "/api/me", OWNER)[1]
+    call(api, "GET", "/api/me", GUARDIAN)
+    # 초대: 가입한 이메일이든 아니든 같은 응답 (가입 여부를 드러내지 않음)
+    assert call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"}) ==         (202, {"invited": "guardian@example.com"})
+    assert call(api, "POST", "/api/guardians", OWNER, {"email": "nobody@example.com"}) ==         (202, {"invited": "nobody@example.com"})
+    assert call(api, "POST", "/api/guardians", OWNER, {"email": "owner@example.com"})[0] == 400
+    # 수락 전: 여행자 목록에는 대기로 보이고, 보호자 권한은 없음
+    mine = call(api, "GET", "/api/guardians", OWNER)[1]["my_guardians"]
+    assert [(g["email"], g["status"]) for g in mine] == [("guardian@example.com", "pending")]
+    assert call(api, "GET", "/api/me", GUARDIAN)[1]["role"] == "user"
+    assert call(api, "GET", "/api/guardian/travelers", GUARDIAN)[1] == []
+    call(api, "POST", "/api/sos", OWNER)
+    assert call(api, "POST", "/api/guardian/view-token", GUARDIAN, {"user_id": owner["id"]}) ==         (403, {"error": "not_guardian"})
+    # 받은 요청에 보이고, 동의 없이 수락할 수 없음
+    inv = call(api, "GET", "/api/guardians/invites", GUARDIAN)[1]
+    assert [i["id"] for i in inv] == [owner["id"]]
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/accept", GUARDIAN, {}) ==         (400, {"error": "agree_required"})
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/accept", STRANGER, {"agree": True})[0] == 404
+    # 수락 후: 보호자가 되고 비상이면 열람 토큰을 받음
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/accept", GUARDIAN, {"agree": True})[0] == 200
+    assert call(api, "GET", "/api/me", GUARDIAN)[1]["role"] == "guardian"
+    assert call(api, "GET", "/api/guardians/invites", GUARDIAN)[1] == []
+    assert call(api, "POST", "/api/guardian/view-token", GUARDIAN, {"user_id": owner["id"]})[0] == 201
+    # 이미 수락한 관계는 다시 수락·거절할 수 없음
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/decline", GUARDIAN)[0] == 404
+
+
+def test_보호자_요청_거절(env):
+    api = env["api"]
+    owner = call(api, "GET", "/api/me", OWNER)[1]
+    call(api, "GET", "/api/me", GUARDIAN)
+    call(api, "POST", "/api/guardians", OWNER, {"email": "guardian@example.com"})
+    assert call(api, "POST", f"/api/guardians/invites/{owner['id']}/decline", GUARDIAN)[0] == 200
+    assert call(api, "GET", "/api/guardians", OWNER)[1]["my_guardians"] == []
+    assert call(api, "GET", "/api/guardians/invites", GUARDIAN)[1] == []
 
 
 def test_로그인_없으면_401(env):

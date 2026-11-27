@@ -18,7 +18,7 @@ class AlreadyPending(Exception):
     """이 여행자에게 이미 대기 중인 열람 요청이 있음."""
 
 
-_IS_GUARDIAN = "EXISTS (SELECT 1 FROM guardians g WHERE g.guardian_id = users.id) AS is_guardian"
+_IS_GUARDIAN = "EXISTS (SELECT 1 FROM guardians g WHERE g.guardian_id = users.id AND g.status = 'accepted') AS is_guardian"
 
 SQL = {
     # ---- 사용자 ----
@@ -34,12 +34,24 @@ SQL = {
         ON CONFLICT (owner_id, guardian_id) DO NOTHING RETURNING id::text AS id""",
     "remove_guardian": "DELETE FROM guardians WHERE owner_id = %s AND guardian_id = %s",
     "my_guardians": """
-        SELECT u.id::text AS id, u.email, u.name FROM guardians g JOIN users u ON u.id = g.guardian_id
+        SELECT u.id::text AS id, u.email, u.name, g.status FROM guardians g JOIN users u ON u.id = g.guardian_id
         WHERE g.owner_id = %s ORDER BY g.created_at""",
+    # 보호자로서 지키는 사람: 수락한 관계만
     "guarding": """
         SELECT u.id::text AS id, u.email, u.name FROM guardians g JOIN users u ON u.id = g.owner_id
-        WHERE g.guardian_id = %s ORDER BY g.created_at""",
-    "is_guardian": "SELECT EXISTS (SELECT 1 FROM guardians WHERE owner_id = %s AND guardian_id = %s) AS ok",
+        WHERE g.guardian_id = %s AND g.status = 'accepted' ORDER BY g.created_at""",
+    # 열람 조건(api·vault 공통): 수락한 보호자만
+    "is_guardian": """
+        SELECT EXISTS (SELECT 1 FROM guardians WHERE owner_id = %s AND guardian_id = %s
+                       AND status = 'accepted') AS ok""",
+    # 받은 보호자 요청(수락 대기)
+    "invites": """
+        SELECT u.id::text AS id, u.email, u.name, g.created_at AS invited_at FROM guardians g
+        JOIN users u ON u.id = g.owner_id WHERE g.guardian_id = %s AND g.status = 'pending' ORDER BY g.created_at""",
+    "accept_invite": """
+        UPDATE guardians SET status = 'accepted', accepted_at = now()
+        WHERE owner_id = %s AND guardian_id = %s AND status = 'pending' RETURNING id::text AS id""",
+    "decline_invite": "DELETE FROM guardians WHERE owner_id = %s AND guardian_id = %s AND status = 'pending'",
     # ---- 비상 상태 ----
     "get_emergency": "SELECT status, trigger_source, changed_at FROM emergency_states WHERE user_id = %s",
     "set_emergency": """
@@ -94,8 +106,8 @@ SQL = {
     # ---- 시험 데이터 ----
     "seed_user": "INSERT INTO users (email, name, cognito_sub) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
     "seed_guardian": """
-        INSERT INTO guardians (owner_id, guardian_id)
-        SELECT o.id, g.id FROM users o, users g WHERE o.email = %s AND g.email = %s
+        INSERT INTO guardians (owner_id, guardian_id, status, accepted_at)
+        SELECT o.id, g.id, 'accepted', now() FROM users o, users g WHERE o.email = %s AND g.email = %s
         ON CONFLICT DO NOTHING""",
 }
 
@@ -129,6 +141,15 @@ class PgStore(PgBase):
 
     def is_guardian(self, owner_id, guardian_id):
         return bool(self._value(SQL["is_guardian"], (owner_id, guardian_id)))
+
+    def invites(self, guardian_id):
+        return self._rows(SQL["invites"], (guardian_id,))
+
+    def accept_invite(self, owner_id, guardian_id):
+        return self._one(SQL["accept_invite"], (owner_id, guardian_id)) is not None
+
+    def decline_invite(self, owner_id, guardian_id):
+        return self._exec(SQL["decline_invite"], (owner_id, guardian_id)) > 0
 
     def get_emergency(self, user_id):
         return self._one(SQL["get_emergency"], (user_id,))
@@ -205,7 +226,8 @@ class MemoryStore:
     def __init__(self):
         self.lock = threading.RLock()
         self.users = {}        # id -> {id, email, name, sub}
-        self.guardians = []    # (owner_id, guardian_id)
+        self.guardians = []    # (owner_id, guardian_id) 순서 유지
+        self.gstatus = {}      # (owner_id, guardian_id) -> pending | accepted
         self.emergency = {}    # user_id -> {status, trigger_source, changed_at}
         self.requests = []     # dicts (만든 순서)
         self.tokens = []
@@ -214,7 +236,7 @@ class MemoryStore:
 
     def _with_role(self, u):
         return {"id": u["id"], "email": u["email"], "name": u["name"],
-                "is_guardian": any(g == u["id"] for _, g in self.guardians)}
+                "is_guardian": any(g == u["id"] and self.gstatus[(o, g)] == "accepted" for o, g in self.guardians)}
 
     def _pub(self, u):
         return {"id": u["id"], "email": u["email"], "name": u["name"]}
@@ -244,22 +266,40 @@ class MemoryStore:
         if (owner_id, guardian_id) in self.guardians:
             return False
         self.guardians.append((owner_id, guardian_id))
+        self.gstatus[(owner_id, guardian_id)] = "pending"
         return True
 
     def remove_guardian(self, owner_id, guardian_id):
         if (owner_id, guardian_id) not in self.guardians:
             return False
         self.guardians.remove((owner_id, guardian_id))
+        self.gstatus.pop((owner_id, guardian_id), None)
         return True
 
     def my_guardians(self, owner_id):
-        return [self._pub(self.users[g]) for o, g in self.guardians if o == owner_id]
+        return [{**self._pub(self.users[g]), "status": self.gstatus[(o, g)]} for o, g in self.guardians if o == owner_id]
 
     def guarding(self, guardian_id):
-        return [self._pub(self.users[o]) for o, g in self.guardians if g == guardian_id]
+        return [self._pub(self.users[o]) for o, g in self.guardians
+                if g == guardian_id and self.gstatus[(o, g)] == "accepted"]
 
     def is_guardian(self, owner_id, guardian_id):
-        return (owner_id, guardian_id) in self.guardians
+        return self.gstatus.get((owner_id, guardian_id)) == "accepted"
+
+    def invites(self, guardian_id):
+        return [{**self._pub(self.users[o]), "invited_at": None} for o, g in self.guardians
+                if g == guardian_id and self.gstatus[(o, g)] == "pending"]
+
+    def accept_invite(self, owner_id, guardian_id):
+        if self.gstatus.get((owner_id, guardian_id)) != "pending":
+            return False
+        self.gstatus[(owner_id, guardian_id)] = "accepted"
+        return True
+
+    def decline_invite(self, owner_id, guardian_id):
+        if self.gstatus.get((owner_id, guardian_id)) != "pending":
+            return False
+        return self.remove_guardian(owner_id, guardian_id)
 
     def get_emergency(self, user_id):
         s = self.emergency.get(user_id)

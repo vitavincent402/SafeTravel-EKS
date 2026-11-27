@@ -52,13 +52,19 @@
       </div>
     </section>
 
+    <section id="invitesCard" class="card" hidden>
+      <h2>📨 받은 보호자 요청</h2>
+      <p class="desc">수락하면 그 사람이 비상일 때 서류를 열람할 수 있어요. 수락하기 전에는 아무 권한도 없어요.</p>
+      <ul id="invList" class="gdlist"></ul>
+    </section>
+
     <section class="card">
       <h2>🤝 내 보호자 <span id="gdCount" class="count">0</span></h2>
-      <p class="desc">비상일 때 내 서류를 볼 수 있는 사람이에요. 보호자도 Keeper에 가입한 이메일이어야 해요.</p>
+      <p class="desc">비상일 때 내 서류를 볼 수 있는 사람이에요. 이메일로 초대하면 상대가 수락해야 보호자가 돼요.</p>
       <ul id="gdList" class="gdlist"><li class="empty">불러오는 중...</li></ul>
       <form id="gdForm" class="gdform">
         <label class="field">보호자 이메일<input id="gdEmail" name="email" type="email" maxlength="254" required placeholder="guardian@example.com" autocomplete="off"></label>
-        <button type="submit" class="btn primary">보호자 등록</button>
+        <button type="submit" class="btn primary">보호자 초대</button>
       </form>
     </section>
 
@@ -96,6 +102,7 @@
 <script src="/js/mock-api.js"></script>
 <script src="/js/keeper-api.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/invites.js"></script>
 <script src="/js/traveler.js"></script>
 </body>
 </html>

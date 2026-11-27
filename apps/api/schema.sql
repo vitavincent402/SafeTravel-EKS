@@ -16,10 +16,16 @@ CREATE TABLE IF NOT EXISTS guardians (
     id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id     uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     guardian_id  uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status       text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),  -- 보호자가 수락해야 accepted
     created_at   timestamptz NOT NULL DEFAULT now(),
+    accepted_at  timestamptz,
     UNIQUE (owner_id, guardian_id),
     CHECK (owner_id <> guardian_id)
 );
+-- 11-27 보호자 수락 단계: 예전 DB(복원)에 열이 없으면 추가한다. 이미 있던 관계는 수락된 것으로 둔다
+ALTER TABLE guardians ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'accepted';
+ALTER TABLE guardians ADD COLUMN IF NOT EXISTS accepted_at timestamptz;
+ALTER TABLE guardians ALTER COLUMN status SET DEFAULT 'pending';
 
 -- 3. 서류: 파일 자체는 S3에, 여기에는 정보만 저장
 CREATE TABLE IF NOT EXISTS documents (
