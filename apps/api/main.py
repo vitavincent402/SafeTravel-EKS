@@ -46,6 +46,7 @@ from users import LoginRefused, profile_from_claims, user_from_row
 from web import HttpError, JsonHandler, RawResponse, log, make_server, routes
 
 UUID = r"[0-9a-fA-F-]{36}"
+MAX_FILE_BYTES = 5 * 1024 * 1024  # 서류 최대 크기 (vault와 같은 값)
 
 
 def utcnow():
@@ -227,6 +228,9 @@ class ApiHandler(JsonHandler):
             conn_request_no=getattr(self, "conn_request_no", None))
         if not content:
             raise HttpError(400, "file required")
+        # vault 한도(5MB)와 같게 여기서 먼저 막는다. 넘기면 base64로 커져 vault 본문 한도(8MB)를 넘고 503이 났음(11-27)
+        if len(content) > MAX_FILE_BYTES:
+            raise HttpError(413, "file too large (max 5MB)")
         status, data = self.vault_json("POST", "/documents", user, body={
             "doc_type": title, "file_name": filename or "file",
             "content_base64": base64.b64encode(content).decode()})
