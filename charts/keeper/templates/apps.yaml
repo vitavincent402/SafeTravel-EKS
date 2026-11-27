@@ -49,14 +49,25 @@ spec:
       {{- if $root.Values.rollout.enabled }}
       terminationGracePeriodSeconds: {{ $root.Values.rollout.terminationGracePeriodSeconds }}
       {{- end }}
-      # 노드 두 대(AZ 두 곳)에 나눠 배치
+      # 같은 앱의 파드 2개를 노드·가용 영역에 나눠 배치 (11/27: api 2개, vault 2개가 각각 한 노드에 몰려 있었음)
+      # matchLabelKeys(pod-template-hash): 롤링 배포 중에는 새 버전 파드끼리만 세어 나눈다.
+      #   이게 없으면 곧 지워질 옛 파드까지 세어, 옛 파드가 빠진 뒤 새 파드가 한쪽에 몰릴 수 있다.
+      # ScheduleAnyway: 노드가 2대뿐이라 DoNotSchedule이면 배포 중 새 파드가 들어갈 자리가 없을 때 배포가 멈춘다(인프라 의견).
       topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: keeper-{{ $name }}
+          matchLabelKeys: ["pod-template-hash"]
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: keeper-{{ $name }}
+          matchLabelKeys: ["pod-template-hash"]
       # Pod Security 'restricted' 기준을 만족하는 설정
       securityContext:
         runAsNonRoot: true
