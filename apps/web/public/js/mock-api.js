@@ -68,10 +68,16 @@
     function cancelPending(s) { if (s.request && s.request.status === "pending") { s.request.status = "cancelled"; } }
     function list(docs) { return docs.map(function (d) { return { id: d.id, title: d.title, uploaded_at: d.uploaded_at }; }); }
 
+    /* 부분 장애 체험: setVaultDown(true)면 서류 기능만 503, 상태 확인 본문에 vault 오류 (E2E 시험용) */
+    var VAULT_DOWN = "keeper.mock.vaultDown";
+    function vaultDown() { try { return sessionStorage.getItem(VAULT_DOWN) === "1"; } catch (e) { return false; } }
+    function usesVault(url) { return url.indexOf("/api/docs") === 0 || url.indexOf("/docs") > 0 || url === "/api/guardian/view-token"; }
+
     function call(method, url, body, headers) {
         var s = tick(load()), r = role(), m;
         var token = headers && headers["X-View-Token"];
         if (!r) { return err(401, "login required"); }
+        if (vaultDown() && usesVault(url)) { return err(503, "vault unavailable"); }
 
         if (method === "GET" && url === "/api/me") {
             if (r === "user") { save(s); return res(200, { name: s.traveler.name, role: "user", emergency: s.traveler.emergency, emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason }); }
@@ -174,6 +180,7 @@
     /* 서류 파일(그림)을 Blob으로 돌려준다. 여행자 본인 또는 유효한 열람 토큰을 가진 보호자만. */
     function blob(url, headers) {
         var s = tick(load()), r = role(), m, token = headers && headers["X-View-Token"];
+        if (vaultDown()) { return Promise.reject({ status: 503 }); }
         m = url.match(/^\/api\/(guardian\/)?docs\/(\d+)$/);
         if (!m) { return Promise.reject({ status: 404 }); }
         if (m[1]) {
@@ -203,6 +210,7 @@
     function upload(url, form) {
         if (role() !== "user") { return err(403, "forbidden"); }
         if (url !== "/api/docs") { return err(404, "not found"); }
+        if (vaultDown()) { return err(503, "vault unavailable"); }
         var file = form.get("file"), title = (form.get("title") || "").toString().trim();
         if (!file || !file.size) { return err(400, "file required"); }
         if (OK_TYPES.indexOf(file.type) < 0) { return err(415, "unsupported type"); }
@@ -224,6 +232,8 @@
         login: function (r) { try { sessionStorage.setItem(ROLE, r); } catch (e) { /* 저장 불가 */ } },
         logout: function () { try { sessionStorage.removeItem(ROLE); } catch (e) { /* 저장 불가 */ } },
         reset: function () { save(fresh()); },
+        health: function () { return res(200, { api: "ok", vault: vaultDown() ? { error: "mock vault down" } : { status: "ok" } }); },
+        setVaultDown: function (on) { try { if (on) { sessionStorage.setItem(VAULT_DOWN, "1"); } else { sessionStorage.removeItem(VAULT_DOWN); } } catch (e) { /* 저장 불가 */ } },
         role: role
     };
 })();

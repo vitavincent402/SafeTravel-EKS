@@ -13,6 +13,8 @@
   <a class="brand" href="/"><img src="/img/logo.svg" alt="">SafeTravel <b>Keeper</b></a>
   <nav id="topbar" class="topbar"></nav>
 </header>
+<!-- 부분 장애 안내: /api/healthz 본문까지 보고, vault나 api가 안 되면 나타난다 (11/26 장애 훈련에서 ALB는 200인데 서류 기능만 멈춘 일 반영) -->
+<div id="healthbar" class="healthbar" role="status" hidden></div>
 
 <!-- 보호자 열람 요청 알림: 10초마다 확인해서 요청이 있으면 나타난다 -->
 <div id="reqbar" class="reqbar" role="alert" hidden>

@@ -164,3 +164,28 @@ def test_no_csp_violation_on_pages(context):
     pg.wait_for_timeout(500)
     csp = [e for e in errors if "Content Security Policy" in e or "Refused to" in e]
     assert csp == [], csp
+
+
+# ---------- 부분 장애 안내 ----------
+
+def test_partial_outage_banner(context):
+    """vault만 멈추면(상태 확인은 200, 본문에 vault 오류) 안내 띠가 뜨고, 돌아오면 사라진다. 11/26 장애 훈련 반영."""
+    pg = traveler(context)
+    bar = pg.locator("#healthbar")
+    expect(bar).to_be_hidden()
+    pg.evaluate("window.keeperMock.setVaultDown(true)")
+    pg.evaluate("window.kp.checkHealth()")
+    expect(bar).to_be_visible()
+    expect(bar).to_contain_text("서류 기능이 잠시 불안정해요")
+    pg.evaluate("window.keeperMock.setVaultDown(false)")
+    pg.evaluate("window.kp.checkHealth()")
+    expect(bar).to_be_hidden()
+    expect(pg.locator("#toast")).to_contain_text("다시 정상")
+
+
+def test_partial_outage_shows_on_5xx(context):
+    """서류 기능이 503을 주면 1분을 기다리지 않고 바로 안내 띠가 뜬다."""
+    pg = traveler(context)
+    pg.evaluate("window.keeperMock.setVaultDown(true)")
+    pg.evaluate("window.keeperApi.call('GET', '/api/docs')")
+    expect(pg.locator("#healthbar")).to_be_visible()
