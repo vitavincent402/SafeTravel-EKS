@@ -170,6 +170,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, label:focus-within {
 .person .avatar { width: 72px; height: 72px; border-radius: 22px; background: var(--teal-l); padding: 4px; }
 .person-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: .25rem; }
 .person-head b { font-size: 1.2rem; }
+.person-head .leave { margin-left: auto; }
 .person .sub { margin: 0 0 1rem; color: var(--muted); font-size: .9rem; }
 .track { list-style: none; display: flex; gap: .4rem; padding: 0; margin: 0 0 1.1rem; }
 .track li { flex: 1; text-align: center; font-size: .78rem; font-weight: 700; color: #9aa8b6; }
@@ -242,6 +243,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, label:focus-within {
 .gdlist .who2 b { font-size: .95rem; }
 .gdlist .who2 span { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gdform { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
+.gdform .agree { flex-basis: 100%; display: flex; align-items: flex-start; gap: .5rem; font-size: .85rem; color: var(--muted); line-height: 1.45; }
+.gdform .agree input { margin-top: .2rem; flex: none; }
 .gdform .field { flex: 1; min-width: 200px; margin: 0; }
 .doc .acts { display: flex; gap: .4rem; margin-top: .45rem; }
 .doc .acts .btn { margin-top: 0; flex: 1; }

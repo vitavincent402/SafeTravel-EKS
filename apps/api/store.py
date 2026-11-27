@@ -34,7 +34,10 @@ SQL = {
         ON CONFLICT (owner_id, guardian_id) DO NOTHING RETURNING id::text AS id""",
     "remove_guardian": "DELETE FROM guardians WHERE owner_id = %s AND guardian_id = %s",
     "my_guardians": """
-        SELECT u.id::text AS id, u.email, u.name, g.status FROM guardians g JOIN users u ON u.id = g.guardian_id
+        SELECT u.id::text AS id, u.email,
+               CASE WHEN g.status = 'accepted' THEN u.name END AS name,   -- 수락 전에는 이름을 보이지 않음
+               g.status
+        FROM guardians g JOIN users u ON u.id = g.guardian_id
         WHERE g.owner_id = %s ORDER BY g.created_at""",
     # 보호자로서 지키는 사람: 수락한 관계만
     "guarding": """
@@ -78,6 +81,10 @@ SQL = {
     "cancel_requests": """
         UPDATE access_requests SET status = 'cancelled', responded_at = %s
         WHERE owner_id = %s AND status = 'pending'""",
+    # 보호자 관계를 끊을 때: 그 보호자의 대기 요청만 취소(남아 있으면 시간이 지나 자동 비상이 됨)
+    "cancel_guardian_requests": """
+        UPDATE access_requests SET status = 'cancelled', responded_at = %s
+        WHERE owner_id = %s AND guardian_id = %s AND status = 'pending'""",
     "latest_request": """
         SELECT id::text AS request_id, status, wait_until FROM access_requests
         WHERE owner_id = %s AND guardian_id = %s ORDER BY requested_at DESC LIMIT 1""",
@@ -85,6 +92,10 @@ SQL = {
     "insert_view_token": """
         INSERT INTO view_tokens (token_hash, guardian_id, owner_id, expires_at) VALUES (%s, %s, %s, %s)""",
     "revoke_view_tokens": "UPDATE view_tokens SET revoked_at = %s WHERE owner_id = %s AND revoked_at IS NULL",
+    # 보호자 관계를 끊을 때: 그 보호자의 열람 토큰만 취소(다시 수락해도 옛 토큰이 살아나지 않게)
+    "revoke_guardian_tokens": """
+        UPDATE view_tokens SET revoked_at = %s
+        WHERE owner_id = %s AND guardian_id = %s AND revoked_at IS NULL""",
     "valid_view_token": """
         SELECT EXISTS (SELECT 1 FROM view_tokens WHERE token_hash = %s AND guardian_id = %s
             AND owner_id = %s AND revoked_at IS NULL AND expires_at > %s) AS ok""",
@@ -180,6 +191,9 @@ class PgStore(PgBase):
     def cancel_requests(self, owner_id, now):
         return self._exec(SQL["cancel_requests"], (now, owner_id))
 
+    def cancel_guardian_requests(self, owner_id, guardian_id, now):
+        return self._exec(SQL["cancel_guardian_requests"], (now, owner_id, guardian_id))
+
     def latest_request(self, owner_id, guardian_id):
         return self._one(SQL["latest_request"], (owner_id, guardian_id))
 
@@ -188,6 +202,9 @@ class PgStore(PgBase):
 
     def revoke_view_tokens(self, owner_id, now):
         return self._exec(SQL["revoke_view_tokens"], (now, owner_id))
+
+    def revoke_guardian_tokens(self, owner_id, guardian_id, now):
+        return self._exec(SQL["revoke_guardian_tokens"], (now, owner_id, guardian_id))
 
     def valid_view_token(self, token_hash, guardian_id, owner_id, now):
         return bool(self._value(SQL["valid_view_token"], (token_hash, guardian_id, owner_id, now)))
@@ -277,7 +294,12 @@ class MemoryStore:
         return True
 
     def my_guardians(self, owner_id):
-        return [{**self._pub(self.users[g]), "status": self.gstatus[(o, g)]} for o, g in self.guardians if o == owner_id]
+        out = []
+        for o, g in self.guardians:
+            if o == owner_id:
+                st = self.gstatus[(o, g)]
+                out.append({**self._pub(self.users[g]), "name": self.users[g]["name"] if st == "accepted" else None, "status": st})
+        return out
 
     def guarding(self, guardian_id):
         return [self._pub(self.users[o]) for o, g in self.guardians
@@ -354,6 +376,14 @@ class MemoryStore:
                 n += 1
         return n
 
+    def cancel_guardian_requests(self, owner_id, guardian_id, now):
+        n = 0
+        for r in self.requests:
+            if r["owner_id"] == owner_id and r["guardian_id"] == guardian_id and r["status"] == "pending":
+                r["status"] = "cancelled"
+                n += 1
+        return n
+
     def latest_request(self, owner_id, guardian_id):
         for r in reversed(self.requests):
             if r["owner_id"] == owner_id and r["guardian_id"] == guardian_id:
@@ -368,6 +398,14 @@ class MemoryStore:
         n = 0
         for t in self.tokens:
             if t["owner_id"] == owner_id and t["revoked_at"] is None:
+                t["revoked_at"] = now
+                n += 1
+        return n
+
+    def revoke_guardian_tokens(self, owner_id, guardian_id, now):
+        n = 0
+        for t in self.tokens:
+            if t["owner_id"] == owner_id and t["guardian_id"] == guardian_id and t["revoked_at"] is None:
                 t["revoked_at"] = now
                 n += 1
         return n

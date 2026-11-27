@@ -5,7 +5,12 @@
     "use strict";
     var api = window.keeperApi, kp = window.kp, $ = kp.$, el = kp.el;
 
+    /* 10초마다 다시 불러와도, 바뀐 게 없으면 그리지 않는다(체크해 둔 동의가 풀리지 않게) */
+    var sig = null;
     function render(list) {
+        var s = JSON.stringify(list);
+        if (s === sig) { return; }
+        sig = s;
         var card = $("invitesCard"), ul = $("invList");
         ul.textContent = "";
         card.hidden = !list.length;
@@ -60,6 +65,7 @@
         api.call("POST", "/api/guardians/invites/" + encodeURIComponent(inv.id) + "/decline").then(function (r) {
             if (!r.ok) { kp.toast(kp.errText(r)); btn.disabled = false; return; }
             kp.toast("보호자 요청을 거절했어요.");
+            sig = null;
             load();
         });
     }
