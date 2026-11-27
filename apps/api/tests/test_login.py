@@ -184,6 +184,9 @@ def test_me_보호자로_등록된_사람은_guardian(server):
     _, body = get(f"{base}/api/me", token(sub="sub-guardian", email="guardian@example.com"))
     store.add_guardian(owner["id"], body["id"])
     _, body = get(f"{base}/api/me", token(sub="sub-guardian", email="guardian@example.com"))
+    assert body["role"] == "user"          # 초대만 받은 상태(수락 전)는 보호자가 아님
+    store.accept_invite(owner["id"], body["id"])
+    _, body = get(f"{base}/api/me", token(sub="sub-guardian", email="guardian@example.com"))
     assert body["role"] == "guardian"
 
 

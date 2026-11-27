@@ -232,7 +232,7 @@
     /* ---------- 내 보호자 ---------- */
     if (api.isMock()) {
         $("gdEmail").placeholder = "friend@keeper.test";
-        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호), friend@keeper.test(박친구)로 등록해 볼 수 있어요."));
+        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)는 바로 수락하고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
     }
 
     function loadGuardians() {
@@ -240,10 +240,10 @@
             var ul = $("gdList");
             ul.textContent = "";
             if (!r.ok) { ul.appendChild(el("li", "empty", kp.errText(r))); return; }
-            /* 응답: { my_guardians: [{id, email, name}], guarding: [...] } */
+            /* 응답: { my_guardians: [{id, email, name, status: pending|accepted}], guarding: [...] } */
             var list = (r.data && r.data.my_guardians) || [];
-            $("gdCount").textContent = String(list.length);
-            if (!list.length) { ul.appendChild(el("li", "empty", "등록된 보호자가 없어요. 비상일 때 서류를 볼 사람을 등록해 주세요.")); return; }
+            $("gdCount").textContent = String(list.filter(function (g) { return g.status !== "pending"; }).length);
+            if (!list.length) { ul.appendChild(el("li", "empty", "등록된 보호자가 없어요. 비상일 때 서류를 볼 사람을 초대해 주세요.")); return; }
             list.forEach(function (g) {
                 var li = el("li");
                 li.appendChild(el("span", null, "🧑‍🤝‍🧑"));
@@ -251,8 +251,11 @@
                 who.appendChild(el("b", null, g.name || g.email || "보호자"));
                 if (g.email && g.name) { who.appendChild(el("span", null, g.email)); }
                 li.appendChild(who);
-                var del = el("button", "btn small ghost-red", "해제");
+                var pending = g.status === "pending";
+                li.appendChild(el("span", "pill " + (pending ? "amber" : "green"), pending ? "수락 대기" : "보호자"));
+                var del = el("button", "btn small ghost-red", pending ? "취소" : "해제");
                 del.type = "button";
+                del.dataset.label = del.textContent;
                 del.addEventListener("click", function () { removeGuardian(g, del); });
                 li.appendChild(del);
                 ul.appendChild(li);
@@ -263,13 +266,13 @@
     function removeGuardian(g, btn) {
         if (btn.dataset.armed !== "1") {
             btn.dataset.armed = "1";
-            btn.textContent = "정말 해제";
-            setTimeout(function () { btn.dataset.armed = ""; btn.textContent = "해제"; }, 4000);
+            btn.textContent = "정말 " + btn.dataset.label;
+            setTimeout(function () { btn.dataset.armed = ""; btn.textContent = btn.dataset.label; }, 4000);
             return;
         }
         api.call("DELETE", "/api/guardians/" + encodeURIComponent(g.id)).then(function (r) {
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
-            kp.toast("보호자 등록을 해제했어요. 이제 내 서류를 볼 수 없어요.");
+            kp.toast(g.status === "pending" ? "보호자 초대를 취소했어요." : "보호자 등록을 해제했어요. 이제 내 서류를 볼 수 없어요.");
             loadGuardians();
         });
     }
@@ -281,7 +284,8 @@
         api.call("POST", "/api/guardians", { email: email }).then(function (r) {
             if (r.status === 400 && r.data && r.data.error === "cannot add yourself") { kp.toast("나 자신은 보호자로 등록할 수 없어요."); return; }
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
-            kp.toast(r.status === 201 ? "보호자로 등록했어요." : "이미 등록된 보호자예요.");
+            /* 가입하지 않은 이메일이어도 같은 응답이 온다(가입 여부를 드러내지 않음) */
+            kp.toast("초대했어요. 상대가 Keeper에 가입한 이메일이면 로그인할 때 요청이 보이고, 수락하면 보호자가 돼요.");
             $("gdForm").reset();
             loadGuardians();
         });
@@ -293,6 +297,7 @@
         renderState(me);
         loadDocs();
         loadGuardians();
+        window.keeperInvites.load();
         checkRequest();
         var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } };
         setInterval(function () { if (!document.hidden) { tick(); } }, POLL_MS);

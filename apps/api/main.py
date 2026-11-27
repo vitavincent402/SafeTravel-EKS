@@ -22,9 +22,12 @@
   GET  /api/guardian/travelers/{user_id}/docs   (X-View-Token)  [{id, title, uploaded_at, content_type}]
   GET  /api/guardian/docs/{id}                  (X-View-Token)  파일
 [보호자 관리] (추가)
-  GET  /api/guardians                       {my_guardians, guarding}
-  POST /api/guardians {email}               보호자 등록 (상대가 한 번 이상 로그인했어야 함)
-  DELETE /api/guardians/{user_id}           보호자 해제
+  GET  /api/guardians                       {my_guardians: [{.., status: pending|accepted}], guarding}
+  POST /api/guardians {email}               보호자 초대 → 202 {invited}. 가입 여부와 상관없이 같은 응답
+  DELETE /api/guardians/{user_id}           보호자 해제 · 초대 취소
+  GET  /api/guardians/invites               받은 보호자 요청(수락 대기) [{id, email, name, invited_at}]
+  POST /api/guardians/invites/{owner_id}/accept {agree: true}   수락(열람 조건 동의 필수)
+  POST /api/guardians/invites/{owner_id}/decline                거절
 
 서류는 api가 직접 다루지 않는다. 서명한 요청으로 vault에 넘기고, 열람 조건 확인도 vault가 한다.
 """
@@ -110,6 +113,9 @@ class ApiHandler(JsonHandler):
         ("GET", r"/api/guardians", "guardians_list"),
         ("POST", r"/api/guardians", "guardians_add"),
         ("DELETE", rf"/api/guardians/(?P<guardian_id>{UUID})", "guardians_remove"),
+        ("GET", r"/api/guardians/invites", "invites_list"),
+        ("POST", rf"/api/guardians/invites/(?P<owner_id>{UUID})/accept", "invites_accept"),
+        ("POST", rf"/api/guardians/invites/(?P<owner_id>{UUID})/decline", "invites_decline"),
     )
 
     # ---------- 로그인 ----------
@@ -349,15 +355,35 @@ class ApiHandler(JsonHandler):
         store = self.app.store
         if not target_email:
             raise HttpError(400, "email required")
+        if target_email == user.email.lower():
+            raise HttpError(400, "cannot add yourself")
+        # 초대만 한다. 보호자가 수락해야 열람 조건에 들어간다.
+        # 가입하지 않은 이메일이어도 같은 응답을 돌려줘 가입 여부를 알 수 없게 한다.
         target = store.user_by_email(target_email)
         if target is None:
-            store.audit(user.id, "guardian_add", "denied", "guardian_not_found")
-            raise HttpError(404, "guardian_not_found")
-        if target["id"] == user.id:
-            raise HttpError(400, "cannot add yourself")
-        created = store.add_guardian(user.id, target["id"])
-        store.audit(user.id, "guardian_add", "allowed")
-        return (201 if created else 200), target
+            store.audit(user.id, "guardian_invite", "denied", "guardian_not_found")
+        elif store.add_guardian(user.id, target["id"]):
+            store.audit(user.id, "guardian_invite", "allowed")
+        return 202, {"invited": target_email}
+
+    def invites_list(self):
+        return self.app.store.invites(self.current_user().id)
+
+    def invites_accept(self, owner_id):
+        user = self.current_user()
+        if self.json_body().get("agree") is not True:
+            raise HttpError(400, "agree_required")
+        if not self.app.store.accept_invite(owner_id.lower(), user.id):
+            raise HttpError(404, "invite_not_found")
+        self.app.store.audit(user.id, "guardian_accept", "allowed")
+        return {"accepted": owner_id}
+
+    def invites_decline(self, owner_id):
+        user = self.current_user()
+        if not self.app.store.decline_invite(owner_id.lower(), user.id):
+            raise HttpError(404, "invite_not_found")
+        self.app.store.audit(user.id, "guardian_decline", "allowed")
+        return {"declined": owner_id}
 
     def guardians_remove(self, guardian_id):
         user = self.current_user()

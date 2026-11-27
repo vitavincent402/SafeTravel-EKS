@@ -5,7 +5,8 @@
  * - 역할(여행자/보호자)은 탭마다 sessionStorage("keeper.mock.role")에 둔다.
  * - 주소와 응답 모양은 db 파트가 만든 api 기준(11/24 회신 반영): 비상 해제, 서류 삭제, 보호자 관리, 요청 상태 cancelled,
  *   403 오류 값 not_guardian · not_emergency · no_view_token · invalid_view_token · not_owner.
- * - 보호자 등록은 가입한 이메일만 된다. 체험용 가입자: guardian@keeper.test(김보호), friend@keeper.test(박친구)
+ * - 보호자는 초대 후 수락해야 된다. 체험 모드에서 guardian@keeper.test(김보호)는 바로 수락, friend@keeper.test(박친구)는 수락 대기로 남는다.
+ *   가입하지 않은 이메일이어도 같은 응답(202)을 준다(실제 서버와 같음).
  * - 기본 샘플 서류: img/sample-passport.png, img/sample-insurance.png (캐릭터 "모험이"의 가상 서류, SAMPLE 표시)
  * - 시간: 보호자 요청 대기 60초, 열람 토큰 15분(임시값). localStorage "keeper.mock.fast"=1 이면 10초 / 90초로 줄인다(시연 연습용). */
 (function () {
@@ -61,7 +62,8 @@
     function role() { try { return sessionStorage.getItem(ROLE); } catch (e) { return null; } }
     function res(status, data) { return Promise.resolve({ status: status, ok: status >= 200 && status < 300, data: data === undefined ? null : data }); }
     function err(status, msg) { return res(status, { error: msg }); }
-    function isGuardian(s) { return s.guardians.some(function (g) { return g.id === s.guardian.id; }); }
+    /* status가 없는 예전 저장값은 수락된 것으로 본다 */
+    function isGuardian(s) { return s.guardians.some(function (g) { return g.id === s.guardian.id && g.status !== "pending"; }); }
     /* SOS나 비상 해제를 누르면 대기 중인 요청은 취소된다 */
     function cancelPending(s) { if (s.request && s.request.status === "pending") { s.request.status = "cancelled"; } }
     function list(docs) { return docs.map(function (d) { return { id: d.id, title: d.title, uploaded_at: d.uploaded_at }; }); }
@@ -101,13 +103,17 @@
                 save(s); return res(204);
             }
             if (method === "GET" && url === "/api/guardians") { return res(200, { my_guardians: s.guardians, guarding: [] }); }
+            if (method === "GET" && url === "/api/guardians/invites") { return res(200, []); }
             if (method === "POST" && url === "/api/guardians") {
                 var email = String((body && body.email) || "").trim().toLowerCase();
                 var acc = ACCOUNTS.filter(function (a) { return a.email === email; })[0];
                 if (!email) { return err(400, "email required"); }
-                if (!acc) { return err(404, "guardian_not_found"); }
-                if (s.guardians.some(function (g) { return g.id === acc.id; })) { return res(200, acc); }
-                s.guardians.push(acc); save(s); return res(201, acc);
+                if (acc && !s.guardians.some(function (g) { return g.id === acc.id; })) {
+                    /* 체험 모드: 김보호(보호자 탭의 사람)는 바로 수락, 그 밖은 수락 대기 */
+                    s.guardians.push({ id: acc.id, name: acc.name, email: acc.email, status: acc.id === s.guardian.id ? "accepted" : "pending" });
+                    save(s);
+                }
+                return res(202, { invited: email });
             }
             m = url.match(/^\/api\/guardians\/([^/]+)$/);
             if (method === "DELETE" && m) {

@@ -185,6 +185,7 @@
 
     kp.requireRole("guardian").then(function (me) {
         kp.topbar(me.name, "보호자");
+        window.keeperInvites.load();
         poll();
         setInterval(function () { if (!document.hidden) { poll(); } }, POLL_MS);
         document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); } });
