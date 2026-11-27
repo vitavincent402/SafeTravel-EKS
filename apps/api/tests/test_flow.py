@@ -327,6 +327,8 @@ def test_업로드_검사(env):
     assert upload(api, OWNER, "보험", "ins.jpg", JPEG)[0] == 201
     assert upload(api, OWNER, "", "a.png", PNG)[0] == 400
     assert upload(api, OWNER, "큰 파일", "big.png", PNG + b"x" * (5 * 1024 * 1024))[0] == 413
+    # 11-27: 6MB 이상은 base64로 바꾸면 vault 본문 한도(8MB)를 넘어 503(vault unavailable)이 나던 문제. api에서 먼저 413
+    assert upload(api, OWNER, "더 큰 파일", "bigger.png", PNG + b"x" * (6 * 1024 * 1024 + 512 * 1024))[0] == 413
     code, doc = upload(api, OWNER, "경로", "../../etc/passwd.png", PNG)
     assert code == 201 and store.documents[doc["id"]]["file_name"] == "passwd.png"
     assert call(api, "POST", "/api/docs", OWNER, {"title": "x"})[0] == 400  # multipart 아님
