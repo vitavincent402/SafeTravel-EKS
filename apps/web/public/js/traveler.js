@@ -232,16 +232,27 @@
     /* ---------- 내 보호자 ---------- */
     if (api.isMock()) {
         $("gdEmail").placeholder = "friend@keeper.test";
-        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)는 바로 수락하고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
+        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)로 초대하면 보호자 탭에서 수락할 수 있고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
     }
 
+    /* 보호자 목록은 10초마다 다시 불러온다. 바뀐 게 없으면 그리지 않고(누르던 '정말 해제' 유지),
+     * 수락 대기였던 사람이 수락하면 바로 알린다(11/27 시험: 보호자는 이미 열람 중인데 여행자 화면은 '수락 대기'로 남았음) */
+    var gdSig = null, gdStatus = {};
     function loadGuardians() {
-        api.call("GET", "/api/guardians").then(function (r) {
+        return api.call("GET", "/api/guardians").then(function (r) {
             var ul = $("gdList");
+            var list = (r.ok && r.data && r.data.my_guardians) || [];
+            var sig = r.ok ? JSON.stringify(list) : "error";
+            if (sig === gdSig) { return; }
+            gdSig = sig;
+            list.forEach(function (g) {
+                if (gdStatus[g.id] === "pending" && g.status !== "pending") { kp.toast((g.name || g.email || "보호자") + " 님이 보호자 요청을 수락했어요. 이제 비상일 때 내 서류를 볼 수 있어요."); }
+            });
+            gdStatus = {};
+            list.forEach(function (g) { gdStatus[g.id] = g.status; });
             ul.textContent = "";
             if (!r.ok) { ul.appendChild(el("li", "empty", kp.errText(r))); return; }
             /* 응답: { my_guardians: [{id, email, name, status: pending|accepted}], guarding: [...] } */
-            var list = (r.data && r.data.my_guardians) || [];
             $("gdCount").textContent = String(list.filter(function (g) { return g.status !== "pending"; }).length);
             if (!list.length) { ul.appendChild(el("li", "empty", "등록된 보호자가 없어요. 비상일 때 서류를 볼 사람을 초대해 주세요.")); return; }
             list.forEach(function (g) {
@@ -301,7 +312,7 @@
         loadGuardians();
         window.keeperInvites.load();
         checkRequest();
-        var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } };
+        var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } loadGuardians(); window.keeperInvites.load(); };
         setInterval(function () { if (!document.hidden) { tick(); } }, POLL_MS);
         document.addEventListener("visibilitychange", function () { if (!document.hidden) { tick(); } });
     }, function () { /* 다른 화면으로 이동함 */ });
