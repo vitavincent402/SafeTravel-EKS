@@ -15,7 +15,7 @@ web 이미지를 배포와 같은 Dockerfile로 빌드해 nginx로 띄우고, �
 | test_guardian_views_only_in_emergency | 평소엔 열람 버튼 없음 → SOS 뒤 열람 → 여행자 해제 시 열람 종료 | #4 |
 | test_security_headers (4개 주소) | CSP(default-src·frame-ancestors·object-src), HSTS 1년, X-Frame-Options, nosniff | #4, #11 |
 | test_no_csp_violation_on_pages | 실제 CSP 아래에서 화면이 막히는 스크립트·스타일 없이 열림 | #11 |
-| test_invite_accept_updates_traveler_without_reload | 초대 → 보호자 동의·수락 → 여행자 화면이 새로고침 없이 "보호자"로 바뀌고 알림 | #41, 이번 PR |
+| test_invite_accept_updates_traveler_without_reload | 자동 비상 규칙(서버 대기 시간) 동의 없이는 초대 불가 → 수락 전 이름 숨김 → 보호자 동의·수락 → 여행자 화면이 새로고침 없이 "보호자"로 바뀌고 알림 | #41, 이번 PR |
 
 보안 헤더 시험 두 개는 nginx로 띄웠을 때만 의미가 있어서 `E2E_HEADERS=1`일 때만 돕니다.
 

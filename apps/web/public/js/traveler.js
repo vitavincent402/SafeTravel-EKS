@@ -230,6 +230,17 @@
     });
 
     /* ---------- 내 보호자 ---------- */
+    /* 자동 비상까지의 대기 시간(서버 값 request_wait_seconds)을 사람이 읽는 글자로. 60 → "60초", 3600 → "1시간" */
+    function duration(sec) {
+        sec = Math.round(Number(sec) || 0);
+        if (sec >= 3600 && sec % 3600 === 0) { return (sec / 3600) + "시간"; }
+        if (sec > 60 && sec % 60 === 0) { return (sec / 60) + "분"; }
+        return sec + "초";
+    }
+    function showRule(me) {
+        if (!me || !me.request_wait_seconds) { return; }
+        $("gdRule").textContent = "보호자가 열람을 요청한 뒤 " + duration(me.request_wait_seconds) + " 안에 거부하지 않으면 비상 상태로 바뀌고, 보호자가 내 서류를 볼 수 있다는 규칙에 동의해요.";
+    }
     if (api.isMock()) {
         $("gdEmail").placeholder = "friend@keeper.test";
         $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)로 초대하면 보호자 탭에서 수락할 수 있고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
@@ -294,7 +305,8 @@
         ev.preventDefault();
         var email = $("gdEmail").value.trim();
         if (!email) { return; }
-        api.call("POST", "/api/guardians", { email: email }).then(function (r) {
+        if (!$("gdAgree").checked) { kp.toast("자동 비상 규칙에 동의해야 초대할 수 있어요."); return; }
+        api.call("POST", "/api/guardians", { email: email, agree_rule: true }).then(function (r) {
             if (r.status === 400 && r.data && r.data.error === "cannot add yourself") { kp.toast("나 자신은 보호자로 등록할 수 없어요."); return; }
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
             /* 가입하지 않은 이메일이어도 같은 응답이 온다(가입 여부를 드러내지 않음) */
@@ -306,6 +318,7 @@
 
     /* ---------- 시작 ---------- */
     kp.requireRole("user").then(function (me) {
+        showRule(me);
         kp.topbar(me.name, "여행자");
         renderState(me);
         loadDocs();

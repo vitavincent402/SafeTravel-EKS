@@ -74,7 +74,7 @@
         if (!r) { return err(401, "login required"); }
 
         if (method === "GET" && url === "/api/me") {
-            if (r === "user") { save(s); return res(200, { name: s.traveler.name, role: "user", emergency: s.traveler.emergency, emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason }); }
+            if (r === "user") { save(s); return res(200, { name: s.traveler.name, role: "user", emergency: s.traveler.emergency, emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason, request_wait_seconds: waitMs() / 1000 }); }
             return res(200, { name: s.guardian.name, role: "guardian" });
         }
 
@@ -117,7 +117,10 @@
                 if (s.docs.length === before) { return err(404, "not found"); }
                 save(s); return res(204);
             }
-            if (method === "GET" && url === "/api/guardians") { return res(200, { my_guardians: s.guardians, guarding: [] }); }
+            /* 실제 서버처럼 수락 전에는 이름을 주지 않는다(이메일만) */
+            if (method === "GET" && url === "/api/guardians") {
+                return res(200, { my_guardians: s.guardians.map(function (g) { return { id: g.id, email: g.email, name: g.status === "pending" ? null : g.name, status: g.status }; }), guarding: [] });
+            }
             if (method === "GET" && url === "/api/guardians/invites") { return res(200, []); }
             if (method === "POST" && url === "/api/guardians") {
                 var email = String((body && body.email) || "").trim().toLowerCase();

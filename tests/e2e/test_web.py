@@ -176,9 +176,14 @@ def test_invite_accept_updates_traveler_without_reload(context):
     row.get_by_role("button", name="해제").click()
     row.get_by_role("button", name="정말 해제").click()
     expect(tv.locator("#gdCount")).to_have_text("0")
+    expect(tv.locator("#gdRule")).to_contain_text("60초 안에 거부하지 않으면")   # 서버 값 request_wait_seconds 그대로
     tv.fill("#gdEmail", "guardian@keeper.test")
     tv.get_by_role("button", name="보호자 초대").click()
+    expect(tv.locator("#gdList")).not_to_contain_text("수락 대기")             # 동의 없이는 초대 안 됨
+    tv.check("#gdAgree")
+    tv.get_by_role("button", name="보호자 초대").click()
     expect(tv.locator("#gdList")).to_contain_text("수락 대기")
+    expect(tv.locator("#gdList")).not_to_contain_text("김보호")                # 수락 전에는 이름 숨김
 
     gd = guardian(context)
     card = gd.locator("#invitesCard")
@@ -191,5 +196,6 @@ def test_invite_accept_updates_traveler_without_reload(context):
     expect(gd.get_by_role("button", name="열람 요청")).to_be_visible(timeout=POLL_WAIT)
 
     expect(tv.locator("#gdList")).not_to_contain_text("수락 대기", timeout=POLL_WAIT)
+    expect(tv.locator("#gdList")).to_contain_text("김보호")
     expect(tv.locator("#gdCount")).to_have_text("1")
     expect(tv.locator("#toast")).to_contain_text("수락했어요")
