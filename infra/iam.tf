@@ -15,6 +15,15 @@ data "aws_iam_openid_connect_provider" "github" {
 
 locals {
   github_oidc_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
+
+  github_oidc_sub_base = var.github_oidc_sub_prefix != "" ? var.github_oidc_sub_prefix : "repo:${var.github_repo}"
+  # 역할을 받을 수 있는 sub 목록. 기본은 main 브랜치에서 돈 워크플로 하나(지금과 같음).
+  # github_deploy_environment를 넣으면 그 GitHub Environment(필수 검토자 승인)를 거친 실행도 허용하고,
+  # github_oidc_allow_main_ref=false로 main 직접 실행을 막으면 검토자 승인을 거친 배포만 역할을 받는다.
+  github_oidc_subjects = compact([
+    var.github_oidc_allow_main_ref ? "${local.github_oidc_sub_base}:ref:refs/heads/main" : "",
+    var.github_deploy_environment != "" ? "${local.github_oidc_sub_base}:environment:${var.github_deploy_environment}" : "",
+  ])
 }
 
 resource "aws_iam_role" "github_actions" {
@@ -28,8 +37,8 @@ resource "aws_iam_role" "github_actions" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          # main 브랜치에서 돈 워크플로만 역할을 받을 수 있음
-          "token.actions.githubusercontent.com:sub" = "${var.github_oidc_sub_prefix != "" ? var.github_oidc_sub_prefix : "repo:${var.github_repo}"}:ref:refs/heads/main"
+          # 위 locals의 sub 목록 중 하나와 일치해야 역할을 받을 수 있음(기본: main 브랜치 워크플로)
+          "token.actions.githubusercontent.com:sub" = local.github_oidc_subjects
         }
       }
     }]
