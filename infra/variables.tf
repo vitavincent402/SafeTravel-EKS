@@ -100,6 +100,17 @@ variable "rate_limit_action" {
   }
 }
 
+variable "waf_extra_rules_action" {
+  description = "2.5차에서 가져온 추가 WAF 규칙 5개(blocked-method, blocked-path, nested-encoding, known-bad-inputs, ip-reputation)의 동작. count(기본, 집계만) 또는 block. Count 로그를 보고 정상 요청이 걸리지 않는지 확인한 뒤 block으로 바꾼다"
+  type        = string
+  default     = "count"
+
+  validation {
+    condition     = contains(["count", "block"], var.waf_extra_rules_action)
+    error_message = "waf_extra_rules_action은 count 또는 block 중 하나여야 합니다."
+  }
+}
+
 variable "enable_alb_access_logs" {
   description = "true면 ALB 접속 로그를 persistent/의 S3 버킷(keeper-alb-logs-<계정>)에 남긴다. 버킷이 먼저 있어야 하므로 persistent/를 apply한 뒤 true로 켠다"
   type        = bool

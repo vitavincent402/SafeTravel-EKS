@@ -147,6 +147,226 @@ resource "aws_wafv2_web_acl" "keeper" {
     }
   }
 
+  # ---- 2.5차(SafeTravel-Serverless 기술 문서 7장)에서 가져온 추가 규칙 5개 ----
+  # 처음에는 Count(waf_extra_rules_action)로 넣어 로그를 보고, 정상 요청이 걸리지 않는지 확인한 뒤 block으로 바꾼다.
+  # 새 규칙은 오탐이 날 수 있다(11/25 업로드 XMP 사례). WAF 로그에서 이 규칙 이름으로 걸린 요청을 먼저 확인한다.
+
+  # TRACE·CONNECT 메서드 차단
+  rule {
+    name     = "blocked-method"
+    priority = 5
+    action {
+      dynamic "block" {
+        for_each = var.waf_extra_rules_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.waf_extra_rules_action == "count" ? [1] : []
+        content {}
+      }
+    }
+    statement {
+      or_statement {
+        statement {
+          byte_match_statement {
+            search_string         = "TRACE"
+            positional_constraint = "EXACTLY"
+            field_to_match {
+              method {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+        statement {
+          byte_match_statement {
+            search_string         = "CONNECT"
+            positional_constraint = "EXACTLY"
+            field_to_match {
+              method {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "blocked-method"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # 민감 경로 탐색 차단: /.git, /.env는 경로 어디에 있어도(포함 일치), /phpmyadmin은 경로 시작.
+  # 2.5차에서 시작 일치로 두었다가 /anything/.env를 놓쳐 포함 일치로 고친 사례(11/17)를 처음부터 반영. 경로는 URL 디코딩 후 소문자로 비교한다.
+  rule {
+    name     = "blocked-path"
+    priority = 6
+    action {
+      dynamic "block" {
+        for_each = var.waf_extra_rules_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.waf_extra_rules_action == "count" ? [1] : []
+        content {}
+      }
+    }
+    statement {
+      or_statement {
+        statement {
+          byte_match_statement {
+            search_string         = "/.git"
+            positional_constraint = "CONTAINS"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "LOWERCASE"
+            }
+          }
+        }
+        statement {
+          byte_match_statement {
+            search_string         = "/.env"
+            positional_constraint = "CONTAINS"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "LOWERCASE"
+            }
+          }
+        }
+        statement {
+          byte_match_statement {
+            search_string         = "/phpmyadmin"
+            positional_constraint = "STARTS_WITH"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "LOWERCASE"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "blocked-path"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # 이중 인코딩(%25) 경로 요청 차단. 정상 요청에는 거의 없지만 파일 이름에 %가 들어가는 경우 오탐이 날 수 있으니 Count 로그로 확인한다
+  rule {
+    name     = "nested-encoding"
+    priority = 7
+    action {
+      dynamic "block" {
+        for_each = var.waf_extra_rules_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.waf_extra_rules_action == "count" ? [1] : []
+        content {}
+      }
+    }
+    statement {
+      byte_match_statement {
+        search_string         = "%25"
+        positional_constraint = "CONTAINS"
+        field_to_match {
+          uri_path {}
+        }
+        text_transformation {
+          priority = 0
+          type     = "NONE"
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "nested-encoding"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # AWS 관리형: 알려진 악성 입력(Log4j 등). 관리형 그룹은 Count로 둘 때 override_action을 count로 한다
+  rule {
+    name     = "aws-known-bad-inputs"
+    priority = 8
+    override_action {
+      dynamic "none" {
+        for_each = var.waf_extra_rules_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.waf_extra_rules_action == "count" ? [1] : []
+        content {}
+      }
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "aws-known-bad-inputs"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # AWS 관리형: IP 평판 목록(악성 IP)
+  rule {
+    name     = "aws-ip-reputation"
+    priority = 9
+    override_action {
+      dynamic "none" {
+        for_each = var.waf_extra_rules_action == "block" ? [1] : []
+        content {}
+      }
+      dynamic "count" {
+        for_each = var.waf_extra_rules_action == "count" ? [1] : []
+        content {}
+      }
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesAmazonIpReputationList"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "aws-ip-reputation"
+      sampled_requests_enabled   = true
+    }
+  }
+
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = "${var.project}-waf"
