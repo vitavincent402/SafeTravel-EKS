@@ -223,7 +223,7 @@
         kp.topbar(me.name, "보호자");
         window.keeperInvites.load();
         poll();
-        setInterval(function () { if (!document.hidden) { poll(); } }, POLL_MS);
+        setInterval(function () { if (!document.hidden) { poll(); window.keeperInvites.load(); } }, POLL_MS);
         document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); } });
     }, function () { /* 다른 화면으로 이동함 */ });
 })();

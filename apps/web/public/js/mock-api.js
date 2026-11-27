@@ -5,7 +5,7 @@
  * - 역할(여행자/보호자)은 탭마다 sessionStorage("keeper.mock.role")에 둔다.
  * - 주소와 응답 모양은 db 파트가 만든 api 기준(11/24 회신 반영): 비상 해제, 서류 삭제, 보호자 관리, 요청 상태 cancelled,
  *   403 오류 값 not_guardian · not_emergency · no_view_token · invalid_view_token · not_owner.
- * - 보호자는 초대 후 수락해야 된다. 체험 모드에서 guardian@keeper.test(김보호)는 바로 수락, friend@keeper.test(박친구)는 수락 대기로 남는다.
+ * - 보호자는 초대 후 수락해야 된다. 체험 모드에서 guardian@keeper.test(김보호)는 보호자 탭에서 수락할 수 있고, friend@keeper.test(박친구)는 수락 대기로 남는다.
  *   가입하지 않은 이메일이어도 같은 응답(202)을 준다(실제 서버와 같음).
  * - 기본 샘플 서류: img/sample-passport.png, img/sample-insurance.png (캐릭터 "모험이"의 가상 서류, SAMPLE 표시)
  * - 시간: 보호자 요청 대기 60초, 열람 토큰 15분(임시값). localStorage "keeper.mock.fast"=1 이면 10초 / 90초로 줄인다(시연 연습용). */
@@ -74,8 +74,23 @@
         if (!r) { return err(401, "login required"); }
 
         if (method === "GET" && url === "/api/me") {
-            if (r === "user") { save(s); return res(200, { name: s.traveler.name, role: "user", emergency: s.traveler.emergency, emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason }); }
+            if (r === "user") { save(s); return res(200, { name: s.traveler.name, role: "user", emergency: s.traveler.emergency, emergency_since: s.traveler.emergency_since, emergency_reason: s.traveler.emergency_reason, request_wait_seconds: waitMs() / 1000 }); }
             return res(200, { name: s.guardian.name, role: "guardian" });
+        }
+
+        /* ---------- 받은 보호자 요청 (보호자 탭 = 김보호) ---------- */
+        if (r === "guardian" && url.indexOf("/api/guardians/invites") === 0) {
+            var mine = s.guardians.filter(function (g) { return g.id === s.guardian.id && g.status === "pending"; })[0];
+            if (method === "GET" && url === "/api/guardians/invites") { return res(200, mine ? [{ id: s.traveler.id, name: s.traveler.name }] : []); }
+            m = url.match(/^\/api\/guardians\/invites\/([^/]+)\/(accept|decline)$/);
+            if (method === "POST" && m && mine && decodeURIComponent(m[1]) === s.traveler.id) {
+                if (m[2] === "accept") {
+                    if (!(body && body.agree === true)) { return err(400, "agree_required"); }
+                    mine.status = "accepted"; save(s); return res(200, { accepted: s.traveler.id });
+                }
+                s.guardians = s.guardians.filter(function (g) { return g !== mine; }); save(s); return res(200, { declined: s.traveler.id });
+            }
+            return err(404, "invite_not_found");
         }
 
         /* ---------- 여행자 ---------- */
@@ -102,15 +117,18 @@
                 if (s.docs.length === before) { return err(404, "not found"); }
                 save(s); return res(204);
             }
-            if (method === "GET" && url === "/api/guardians") { return res(200, { my_guardians: s.guardians, guarding: [] }); }
+            /* 실제 서버처럼 수락 전에는 이름을 주지 않는다(이메일만) */
+            if (method === "GET" && url === "/api/guardians") {
+                return res(200, { my_guardians: s.guardians.map(function (g) { return { id: g.id, email: g.email, name: g.status === "pending" ? null : g.name, status: g.status }; }), guarding: [] });
+            }
             if (method === "GET" && url === "/api/guardians/invites") { return res(200, []); }
             if (method === "POST" && url === "/api/guardians") {
                 var email = String((body && body.email) || "").trim().toLowerCase();
                 var acc = ACCOUNTS.filter(function (a) { return a.email === email; })[0];
                 if (!email) { return err(400, "email required"); }
                 if (acc && !s.guardians.some(function (g) { return g.id === acc.id; })) {
-                    /* 체험 모드: 김보호(보호자 탭의 사람)는 바로 수락, 그 밖은 수락 대기 */
-                    s.guardians.push({ id: acc.id, name: acc.name, email: acc.email, status: acc.id === s.guardian.id ? "accepted" : "pending" });
+                    /* 실제 서버처럼 모두 수락 대기로 시작. 김보호는 보호자 탭에서 수락할 수 있다 */
+                    s.guardians.push({ id: acc.id, name: acc.name, email: acc.email, status: "pending" });
                     save(s);
                 }
                 return res(202, { invited: email });

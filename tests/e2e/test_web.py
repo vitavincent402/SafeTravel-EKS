@@ -164,3 +164,38 @@ def test_no_csp_violation_on_pages(context):
     pg.wait_for_timeout(500)
     csp = [e for e in errors if "Content Security Policy" in e or "Refused to" in e]
     assert csp == [], csp
+
+
+# ---------- 보호자 초대·수락 ----------
+
+def test_invite_accept_updates_traveler_without_reload(context):
+    """초대 → 보호자가 동의하고 수락 → 여행자 화면이 새로고침 없이 '보호자'로 바뀌고 알림이 뜬다.
+    11/27 실제 시험에서 보호자는 이미 열람 중인데 여행자 화면은 '수락 대기'로 남았던 일 반영."""
+    tv = traveler(context)
+    row = tv.locator("#gdList li", has_text="김보호")
+    row.get_by_role("button", name="해제").click()
+    row.get_by_role("button", name="정말 해제").click()
+    expect(tv.locator("#gdCount")).to_have_text("0")
+    expect(tv.locator("#gdRule")).to_contain_text("60초 안에 거부하지 않으면")   # 서버 값 request_wait_seconds 그대로
+    tv.fill("#gdEmail", "guardian@keeper.test")
+    tv.get_by_role("button", name="보호자 초대").click()
+    expect(tv.locator("#gdList")).not_to_contain_text("수락 대기")             # 동의 없이는 초대 안 됨
+    tv.check("#gdAgree")
+    tv.get_by_role("button", name="보호자 초대").click()
+    expect(tv.locator("#gdList")).to_contain_text("수락 대기")
+    expect(tv.locator("#gdList")).not_to_contain_text("김보호")                # 수락 전에는 이름 숨김
+
+    gd = guardian(context)
+    card = gd.locator("#invitesCard")
+    expect(card).to_be_visible()
+    expect(gd.get_by_role("button", name="열람 요청")).to_have_count(0)   # 수락 전에는 권한 없음
+    accept = card.get_by_role("button", name="수락")
+    expect(accept).to_be_disabled()                                       # 동의 전에는 못 누름
+    card.locator("input[type=checkbox]").check()
+    accept.click()
+    expect(gd.get_by_role("button", name="열람 요청")).to_be_visible(timeout=POLL_WAIT)
+
+    expect(tv.locator("#gdList")).not_to_contain_text("수락 대기", timeout=POLL_WAIT)
+    expect(tv.locator("#gdList")).to_contain_text("김보호")
+    expect(tv.locator("#gdCount")).to_have_text("1")
+    expect(tv.locator("#toast")).to_contain_text("수락했어요")

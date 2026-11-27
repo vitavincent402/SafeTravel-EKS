@@ -242,6 +242,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, label:focus-within {
 .gdlist .who2 b { font-size: .95rem; }
 .gdlist .who2 span { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gdform { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
+.gdform .agree { flex-basis: 100%; display: flex; align-items: flex-start; gap: .5rem; font-size: .85rem; color: var(--muted); line-height: 1.45; }
+.gdform .agree input { margin-top: .2rem; flex: none; }
 .gdform .field { flex: 1; min-width: 200px; margin: 0; }
 .doc .acts { display: flex; gap: .4rem; margin-top: .45rem; }
 .doc .acts .btn { margin-top: 0; flex: 1; }

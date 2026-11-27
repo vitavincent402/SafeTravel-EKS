@@ -64,6 +64,8 @@
       <ul id="gdList" class="gdlist"><li class="empty">불러오는 중...</li></ul>
       <form id="gdForm" class="gdform">
         <label class="field">보호자 이메일<input id="gdEmail" name="email" type="email" maxlength="254" required placeholder="guardian@example.com" autocomplete="off"></label>
+        <!-- 자동 비상 규칙 동의: 대기 시간은 /api/me의 request_wait_seconds를 그대로 보여 준다 -->
+        <label class="agree"><input id="gdAgree" type="checkbox" required> <span id="gdRule">보호자가 열람을 요청한 뒤 정해진 시간 안에 거부하지 않으면 비상 상태로 바뀌고, 보호자가 내 서류를 볼 수 있다는 규칙에 동의해요.</span></label>
         <button type="submit" class="btn primary">보호자 초대</button>
       </form>
     </section>

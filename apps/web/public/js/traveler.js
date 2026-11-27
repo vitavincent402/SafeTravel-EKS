@@ -230,18 +230,40 @@
     });
 
     /* ---------- 내 보호자 ---------- */
+    /* 자동 비상까지의 대기 시간(서버 값 request_wait_seconds)을 사람이 읽는 글자로. 60 → "60초", 3600 → "1시간" */
+    function duration(sec) {
+        sec = Math.round(Number(sec) || 0);
+        if (sec >= 3600 && sec % 3600 === 0) { return (sec / 3600) + "시간"; }
+        if (sec > 60 && sec % 60 === 0) { return (sec / 60) + "분"; }
+        return sec + "초";
+    }
+    function showRule(me) {
+        if (!me || !me.request_wait_seconds) { return; }
+        $("gdRule").textContent = "보호자가 열람을 요청한 뒤 " + duration(me.request_wait_seconds) + " 안에 거부하지 않으면 비상 상태로 바뀌고, 보호자가 내 서류를 볼 수 있다는 규칙에 동의해요.";
+    }
     if (api.isMock()) {
         $("gdEmail").placeholder = "friend@keeper.test";
-        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)는 바로 수락하고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
+        $("gdForm").appendChild(el("p", "hint", "체험 모드: guardian@keeper.test(김보호)로 초대하면 보호자 탭에서 수락할 수 있고, friend@keeper.test(박친구)는 수락 대기로 남아요."));
     }
 
+    /* 보호자 목록은 10초마다 다시 불러온다. 바뀐 게 없으면 그리지 않고(누르던 '정말 해제' 유지),
+     * 수락 대기였던 사람이 수락하면 바로 알린다(11/27 시험: 보호자는 이미 열람 중인데 여행자 화면은 '수락 대기'로 남았음) */
+    var gdSig = null, gdStatus = {};
     function loadGuardians() {
-        api.call("GET", "/api/guardians").then(function (r) {
+        return api.call("GET", "/api/guardians").then(function (r) {
             var ul = $("gdList");
+            var list = (r.ok && r.data && r.data.my_guardians) || [];
+            var sig = r.ok ? JSON.stringify(list) : "error";
+            if (sig === gdSig) { return; }
+            gdSig = sig;
+            list.forEach(function (g) {
+                if (gdStatus[g.id] === "pending" && g.status !== "pending") { kp.toast((g.name || g.email || "보호자") + " 님이 보호자 요청을 수락했어요. 이제 비상일 때 내 서류를 볼 수 있어요."); }
+            });
+            gdStatus = {};
+            list.forEach(function (g) { gdStatus[g.id] = g.status; });
             ul.textContent = "";
             if (!r.ok) { ul.appendChild(el("li", "empty", kp.errText(r))); return; }
             /* 응답: { my_guardians: [{id, email, name, status: pending|accepted}], guarding: [...] } */
-            var list = (r.data && r.data.my_guardians) || [];
             $("gdCount").textContent = String(list.filter(function (g) { return g.status !== "pending"; }).length);
             if (!list.length) { ul.appendChild(el("li", "empty", "등록된 보호자가 없어요. 비상일 때 서류를 볼 사람을 초대해 주세요.")); return; }
             list.forEach(function (g) {
@@ -283,7 +305,8 @@
         ev.preventDefault();
         var email = $("gdEmail").value.trim();
         if (!email) { return; }
-        api.call("POST", "/api/guardians", { email: email }).then(function (r) {
+        if (!$("gdAgree").checked) { kp.toast("자동 비상 규칙에 동의해야 초대할 수 있어요."); return; }
+        api.call("POST", "/api/guardians", { email: email, agree_rule: true }).then(function (r) {
             if (r.status === 400 && r.data && r.data.error === "cannot add yourself") { kp.toast("나 자신은 보호자로 등록할 수 없어요."); return; }
             if (!r.ok) { kp.toast(kp.errText(r)); return; }
             /* 가입하지 않은 이메일이어도 같은 응답이 온다(가입 여부를 드러내지 않음) */
@@ -295,13 +318,14 @@
 
     /* ---------- 시작 ---------- */
     kp.requireRole("user").then(function (me) {
+        showRule(me);
         kp.topbar(me.name, "여행자");
         renderState(me);
         loadDocs();
         loadGuardians();
         window.keeperInvites.load();
         checkRequest();
-        var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } };
+        var tick = function () { checkRequest(); if (!pendingId) { refreshMe(); } loadGuardians(); window.keeperInvites.load(); };
         setInterval(function () { if (!document.hidden) { tick(); } }, POLL_MS);
         document.addEventListener("visibilitychange", function () { if (!document.hidden) { tick(); } });
     }, function () { /* 다른 화면으로 이동함 */ });
