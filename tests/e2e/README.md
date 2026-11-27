@@ -20,7 +20,7 @@ web 이미지를 배포와 같은 Dockerfile로 빌드해 nginx로 띄우고, �
 
 ## 언제 도나
 
-`.github/workflows/web-e2e.yml`: `apps/web/**`나 `tests/e2e/**`를 바꾸는 PR과 main 병합 때 자동으로 돕니다. AWS 권한은 쓰지 않습니다.
+`.github/workflows/web-e2e.yml`: 모든 PR과 main 병합 때 돕니다. 필수 검사로 쓰기 위해서입니다. `apps/web/**`, `tests/e2e/**`, 이 워크플로 파일이 안 바뀌었으면 시험을 건너뛰고 바로 성공으로 끝나므로, infra/나 apps/api/만 바꾼 PR도 병합이 잠기지 않습니다. AWS 권한은 쓰지 않습니다.
 실패하면 열린 탭 캡처와 nginx 로그가 결과물(e2e-shots)로 올라갑니다.
 
 ## 직접 돌리기

@@ -1,13 +1,13 @@
 # 화면 E2E 시험: web 이미지를 그대로 빌드해 nginx로 띄우고, 체험 모드로 핵심 흐름과 보안 헤더를 확인한다.
 # AWS 권한은 쓰지 않는다(클러스터·Cognito·api 없이 동작). 실패하면 화면 캡처와 nginx 로그를 결과물로 올린다.
+# 필수 검사로 쓰려고 모든 PR에서 돈다. 화면 관련 파일(apps/web, tests/e2e, 이 파일)이 안 바뀌었으면
+# 시험을 건너뛰고 바로 성공으로 끝난다(검사 결과를 기다리느라 병합이 잠기지 않게).
 name: web-e2e
 
 on:
   pull_request:
-    paths: ["apps/web/**", "tests/e2e/**", ".github/workflows/web-e2e.yml"]
   push:
     branches: [main]
-    paths: ["apps/web/**", "tests/e2e/**", ".github/workflows/web-e2e.yml"]
   workflow_dispatch:
 
 permissions:
@@ -19,25 +19,59 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 화면 관련 파일이 바뀌었는지 확인
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) BASE="$PR_BASE" ;;
+            push) BASE="$PUSH_BEFORE" ;;
+            *) BASE="" ;;
+          esac
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "비교 기준이 없어 시험을 돌립니다 ($EVENT)"; echo "web=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+          echo "바뀐 파일:"; echo "$CHANGED"
+          if echo "$CHANGED" | grep -qE '^(apps/web/|tests/e2e/|\.github/workflows/web-e2e\.yml$)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 화면 변경 없음 → 시험 건너뜀
+        if: steps.changes.outputs.web != 'true'
+        run: echo "apps/web, tests/e2e, web-e2e.yml 변경이 없어 시험을 건너뛰고 성공으로 끝냅니다."
 
       - name: web 이미지 빌드 (배포와 같은 Dockerfile)
+        if: steps.changes.outputs.web == 'true'
         run: docker build -t keeper-web:e2e apps/web
 
       - name: web 띄우기 (8080)
+        if: steps.changes.outputs.web == 'true'
         run: |
           docker run -d --name web -p 8080:8080 keeper-web:e2e
           for i in $(seq 1 30); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
 
       - uses: actions/setup-python@v5
+        if: steps.changes.outputs.web == 'true'
         with:
           python-version: "3.12"
 
       - name: Playwright 설치
+        if: steps.changes.outputs.web == 'true'
         run: |
           pip install playwright==1.48.0 pytest==8.3.3
           python -m playwright install --with-deps chromium
 
       - name: E2E 시험
+        if: steps.changes.outputs.web == 'true'
         env:
           BASE_URL: http://localhost:8080
           E2E_HEADERS: "1"
@@ -45,11 +79,11 @@ jobs:
         run: pytest tests/e2e -v
 
       - name: 실패 시 nginx 로그
-        if: failure()
+        if: failure() && steps.changes.outputs.web == 'true'
         run: docker logs web > e2e-shots/nginx.log 2>&1 || true
 
       - name: 실패 시 결과물 올리기
-        if: failure()
+        if: failure() && steps.changes.outputs.web == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: e2e-shots
