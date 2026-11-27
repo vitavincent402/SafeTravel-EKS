@@ -13,15 +13,23 @@
         return r.json().catch(function () { return null; }).then(function (d) { return { status: r.status, ok: r.ok, data: d }; });
     }
 
+    /* 5xx면 상태 확인을 바로 다시 해서, 부분 장애 안내를 1분 기다리지 않고 띄운다 (체험 모드 포함) */
+    function watch(p) {
+        return p.then(function (r) {
+            if (r && r.status >= 500 && window.kp && window.kp.checkHealth) { window.kp.checkHealth(); }
+            return r;
+        });
+    }
+
     /* JSON 요청. headers는 추가 머리말(예: 보호자 열람 토큰 X-View-Token). */
     function call(method, url, body, headers) {
-        if (isMock()) { return window.keeperMock.call(method, url, body, headers || {}); }
+        if (isMock()) { return watch(window.keeperMock.call(method, url, body, headers || {})); }
         var h = { "Accept": "application/json" }, k;
         for (k in (headers || {})) { if (Object.prototype.hasOwnProperty.call(headers, k)) { h[k] = headers[k]; } }
         if (method !== "GET") { h["X-Requested-With"] = "fetch"; }
         var init = { method: method, headers: h };
         if (body !== undefined && body !== null) { h["Content-Type"] = "application/json"; init.body = JSON.stringify(body); }
-        return window.stApi.fetch(url, init).then(toResult);
+        return watch(window.stApi.fetch(url, init).then(toResult));
     }
 
     /* 서류 파일 받기 → Blob. <img src>로는 Authorization 머리말을 못 붙이므로 받아서 blob: 주소로 보여 준다. */
@@ -34,8 +42,8 @@
 
     /* 서류 올리기(multipart). */
     function upload(url, form) {
-        if (isMock()) { return window.keeperMock.upload(url, form); }
-        return window.stApi.fetch(url, { method: "POST", body: form, headers: { "X-Requested-With": "fetch" } }).then(toResult);
+        if (isMock()) { return watch(window.keeperMock.upload(url, form)); }
+        return watch(window.stApi.fetch(url, { method: "POST", body: form, headers: { "X-Requested-With": "fetch" } }).then(toResult));
     }
 
     function isLoggedIn() { return isMock() ? !!window.keeperMock.role() : window.stAuth.isLoggedIn(); }

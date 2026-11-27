@@ -59,6 +59,48 @@
         bar.appendChild(who);
         bar.appendChild(out);
         if (window.keeperApi.isMock()) { mockBanner(); }
+        watchHealth();
+    }
+
+    /* 부분 장애 안내. api는 vault가 죽어도 /api/healthz에 200을 주고 본문에만 vault 오류를 넣는다("200 ≠ 정상", 11/26 훈련).
+     * 그래서 상태 숫자가 아니라 본문을 보고 띠를 띄운다. 처음 한 번 + 화면이 보일 때 1분마다 + api가 5xx를 줄 때. */
+    var HEALTH_TEXT = {
+        vault: "서류 기능이 잠시 불안정해요. 서류 보기·올리기가 실패할 수 있어요. 잠시 뒤 다시 시도해 주세요.",
+        api: "서버 연결이 불안정해요. 잠시 뒤 다시 시도해 주세요."
+    };
+    var health = { state: "ok", busy: false, started: false };
+    function healthResult() {
+        if (window.keeperApi.isMock()) { return window.keeperMock.health(); }
+        return fetch("/api/healthz", { cache: "no-store", credentials: "omit" }).then(function (r) {
+            return r.json().catch(function () { return null; }).then(function (d) { return { status: r.status, ok: r.ok, data: d }; });
+        });
+    }
+    function showHealth(state) {
+        var b = $("healthbar");
+        if (!b) { return; }
+        var was = health.state;
+        health.state = state;
+        b.hidden = state === "ok";
+        b.textContent = state === "ok" ? "" : HEALTH_TEXT[state];
+        if (was !== "ok" && state === "ok") { toast("서비스가 다시 정상이에요."); }
+    }
+    function checkHealth() {
+        if (health.busy || !$("healthbar")) { return Promise.resolve(health.state); }
+        health.busy = true;
+        return healthResult().then(function (r) {
+            if (!r || !r.ok || !r.data) { return "api"; }
+            return (r.data.vault && r.data.vault.error) ? "vault" : "ok";
+        }, function () { return "api"; }).then(function (state) {
+            health.busy = false;
+            showHealth(state);
+            return state;
+        });
+    }
+    function watchHealth() {
+        if (health.started || !$("healthbar")) { return; }
+        health.started = true;
+        checkHealth();
+        setInterval(function () { if (document.visibilityState === "visible") { checkHealth(); } }, 60000);
     }
 
     function mockBanner() {
@@ -191,5 +233,5 @@
         return code;
     }
 
-    window.kp = { reason: reason, $: $, el: el, remain: remain, countdown: countdown, when: when, topbar: topbar, requireRole: requireRole, toast: toast, errText: errText, ring: ring, openModal: openModal, closeModal: closeModal };
+    window.kp = { reason: reason, $: $, el: el, remain: remain, countdown: countdown, when: when, topbar: topbar, requireRole: requireRole, toast: toast, errText: errText, checkHealth: checkHealth, ring: ring, openModal: openModal, closeModal: closeModal };
 })();
